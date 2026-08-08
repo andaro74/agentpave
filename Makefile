@@ -27,7 +27,15 @@ check: ## Hermetic gate: lint + unit/contract tests on fixtures + policy + synth
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run pytest -q || { code=$$?; if [ $$code -eq 5 ]; then echo "(no tests collected yet — M00)"; else exit $$code; fi; }
+	$(MAKE) --no-print-directory synth
 	@echo "✅ make check passed (hermetic)"
+
+.PHONY: synth
+synth: ## Synthesise CloudFormation from the CDK app — no AWS account needed
+	@# Credentials are cleared deliberately: synth that needs an account is
+	@# synth that will fail in CI. The IAM assertions themselves live in
+	@# platform/infra/tests/ and run under pytest above.
+	AWS_PROFILE= AWS_REGION= cdk synth --quiet
 
 .PHONY: diagrams
 diagrams: ## Render docs/diagrams/*.mermaid to SVG
