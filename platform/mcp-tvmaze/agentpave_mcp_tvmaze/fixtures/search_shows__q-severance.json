@@ -1,0 +1,191 @@
+{
+  "body": [
+    {
+      "score": 0.8995013,
+      "show": {
+        "_links": {
+          "previousepisode": {
+            "href": "https://api.tvmaze.com/episodes/2939710",
+            "name": "Cold Harbor"
+          },
+          "self": {
+            "href": "https://api.tvmaze.com/shows/44933"
+          }
+        },
+        "averageRuntime": 49,
+        "dvdCountry": null,
+        "ended": null,
+        "externals": {
+          "imdb": "tt11280740",
+          "thetvdb": 371980,
+          "tvrage": null
+        },
+        "genres": [
+          "Drama",
+          "Science-Fiction",
+          "Mystery"
+        ],
+        "id": 44933,
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/548/1371406.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/548/1371406.jpg"
+        },
+        "language": "English",
+        "name": "Severance",
+        "network": null,
+        "officialSite": "https://tv.apple.com/show/severance/umc.cmc.1srk2goyh2q2zdxcx605w8vtx",
+        "premiered": "2022-02-18",
+        "rating": {
+          "average": 7.7
+        },
+        "runtime": null,
+        "schedule": {
+          "days": [
+            "Friday"
+          ],
+          "time": ""
+        },
+        "status": "Running",
+        "summary": "<p>Mark Scout leads a team at Lumon Industries, whose employees have undergone a severance procedure, which surgically divides their memories between their work and personal lives. This daring experiment in \"work-life balance\" is called into question as Mark finds himself at the center of an unraveling mystery that will force him to confront the true nature of his work\u2026 and of himself.</p>",
+        "type": "Scripted",
+        "updated": 1780897121,
+        "url": "https://www.tvmaze.com/shows/44933/severance",
+        "webChannel": {
+          "country": null,
+          "id": 310,
+          "name": "Apple TV",
+          "officialSite": "https://tv.apple.com/"
+        },
+        "weight": 100
+      }
+    },
+    {
+      "score": 0.20437212,
+      "show": {
+        "_links": {
+          "previousepisode": {
+            "href": "https://api.tvmaze.com/episodes/3461855",
+            "name": "Episode 24"
+          },
+          "self": {
+            "href": "https://api.tvmaze.com/shows/85532"
+          }
+        },
+        "averageRuntime": 17,
+        "dvdCountry": null,
+        "ended": "2025-12-12",
+        "externals": {
+          "imdb": null,
+          "thetvdb": 467232,
+          "tvrage": null
+        },
+        "genres": [
+          "Drama",
+          "Romance"
+        ],
+        "id": 85532,
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/603/1509559.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/603/1509559.jpg"
+        },
+        "language": "Chinese",
+        "name": "Aligned Reverence",
+        "network": null,
+        "officialSite": "https://v.qq.com/x/cover/mzc002001qhoz7l.html",
+        "premiered": "2025-12-05",
+        "rating": {
+          "average": null
+        },
+        "runtime": null,
+        "schedule": {
+          "days": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "time": "12:00"
+        },
+        "status": "Ended",
+        "summary": "<p>Orphaned girl Su Jinyuan trusted the wrong person and fled her marriage, only to bring disaster upon herself. When she returned, she was horrified to find the entire Xiao family, her benefactors wiped out. To atone for her sins, her fate becomes entwined with Xie Yunyan, the Xiao family's adopted son who had taken his brother's place at the wedding. Together, they struggle to survive in desperate circumstances, break free from the shackles of the world, tear their enemies apart, and carve out a blazing, blood-stained love that defies destiny itself.</p>",
+        "type": "Scripted",
+        "updated": 1765897752,
+        "url": "https://www.tvmaze.com/shows/85532/aligned-reverence",
+        "webChannel": {
+          "country": {
+            "code": "CN",
+            "name": "China",
+            "timezone": "Asia/Shanghai"
+          },
+          "id": 104,
+          "name": "Tencent QQ",
+          "officialSite": "https://v.qq.com/"
+        },
+        "weight": 7
+      }
+    },
+    {
+      "score": 0.15470764,
+      "show": {
+        "_links": {
+          "previousepisode": {
+            "href": "https://api.tvmaze.com/episodes/2610824",
+            "name": "L'Ame de la vall\u00e9e"
+          },
+          "self": {
+            "href": "https://api.tvmaze.com/shows/70294"
+          }
+        },
+        "averageRuntime": 90,
+        "dvdCountry": null,
+        "ended": "1995-10-23",
+        "externals": {
+          "imdb": "tt0170511",
+          "thetvdb": 261526,
+          "tvrage": null
+        },
+        "genres": [],
+        "id": 70294,
+        "image": {
+          "medium": "https://static.tvmaze.com/uploads/images/medium_portrait/471/1177870.jpg",
+          "original": "https://static.tvmaze.com/uploads/images/original_untouched/471/1177870.jpg"
+        },
+        "language": "French",
+        "name": "La Rivi\u00e8re Esp\u00e9rance",
+        "network": {
+          "country": {
+            "code": "FR",
+            "name": "France",
+            "timezone": "Europe/Paris"
+          },
+          "id": 106,
+          "name": "France 2",
+          "officialSite": "https://www.france2.fr/"
+        },
+        "officialSite": null,
+        "premiered": "1995-09-04",
+        "rating": {
+          "average": null
+        },
+        "runtime": 90,
+        "schedule": {
+          "days": [
+            "Monday"
+          ],
+          "time": ""
+        },
+        "status": "Ended",
+        "summary": null,
+        "type": "Scripted",
+        "updated": 1704795484,
+        "url": "https://www.tvmaze.com/shows/70294/la-riviere-esperance",
+        "webChannel": null,
+        "weight": 4
+      }
+    }
+  ],
+  "status": 200
+}

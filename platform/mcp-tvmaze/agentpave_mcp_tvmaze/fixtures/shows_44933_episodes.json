@@ -1,0 +1,556 @@
+{
+  "body": [
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2238231"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-02-18",
+      "airstamp": "2022-02-18T12:00:00+00:00",
+      "airtime": "",
+      "id": 2238231,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/396/991497.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/396/991497.jpg"
+      },
+      "name": "Good News About Hell",
+      "number": 1,
+      "rating": {
+        "average": 7.2
+      },
+      "runtime": 57,
+      "season": 1,
+      "summary": "<p>Mark is promoted to lead a team who've had their memories surgically divided between their work and personal lives.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2238231/severance-1x01-good-news-about-hell"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2238339"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-02-18",
+      "airstamp": "2022-02-18T12:00:00+00:00",
+      "airtime": "",
+      "id": 2238339,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/396/991498.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/396/991498.jpg"
+      },
+      "name": "Half Loop",
+      "number": 2,
+      "rating": {
+        "average": 7
+      },
+      "runtime": 53,
+      "season": 1,
+      "summary": "<p>The team train new hire Helly on macrodata refinement. Mark takes a day off to meet with a mysterious former colleague.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2238339/severance-1x02-half-loop"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2238340"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-02-25",
+      "airstamp": "2022-02-25T12:00:00+00:00",
+      "airtime": "",
+      "id": 2238340,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/396/991499.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/396/991499.jpg"
+      },
+      "name": "In Perpetuity",
+      "number": 3,
+      "rating": {
+        "average": 7.2
+      },
+      "runtime": 56,
+      "season": 1,
+      "summary": "<p>Mark takes the team on a field trip, but Helly continues to rebel. A deteriorating Petey struggles to tell Mark about Lumon's misdeeds.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2238340/severance-1x03-in-perpetuity"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2257189"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-03-04",
+      "airstamp": "2022-03-04T12:00:00+00:00",
+      "airtime": "",
+      "id": 2257189,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/398/996068.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/398/996068.jpg"
+      },
+      "name": "The You You Are",
+      "number": 4,
+      "rating": {
+        "average": 7.4
+      },
+      "runtime": 46,
+      "season": 1,
+      "summary": "<p>Irving finds an intriguing book at work. Helly aggressively pursues a meeting with her Outie. Mark attends a funeral with Ms. Selvig.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2257189/severance-1x04-the-you-you-are"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2257190"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-03-11",
+      "airstamp": "2022-03-11T12:00:00+00:00",
+      "airtime": "",
+      "id": 2257190,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/398/996070.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/398/996070.jpg"
+      },
+      "name": "The Grim Barbarity of Optics and Design",
+      "number": 5,
+      "rating": {
+        "average": 7.3
+      },
+      "runtime": 43,
+      "season": 1,
+      "summary": "<p>Irving and Dylan confront Burt about his lies. Mark and Helly discover a strange new department.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2257190/severance-1x05-the-grim-barbarity-of-optics-and-design"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2292925"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-03-18",
+      "airstamp": "2022-03-18T12:00:00+00:00",
+      "airtime": "",
+      "id": 2292925,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/400/1000620.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/400/1000620.jpg"
+      },
+      "name": "Hide and Seek",
+      "number": 6,
+      "rating": {
+        "average": 7.3
+      },
+      "runtime": 40,
+      "season": 1,
+      "summary": "<p>The team angers Cobel by forming an alliance.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2292925/severance-1x06-hide-and-seek"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2297221"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-03-25",
+      "airstamp": "2022-03-25T12:00:00+00:00",
+      "airtime": "",
+      "id": 2297221,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/400/1000621.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/400/1000621.jpg"
+      },
+      "name": "Defiant Jazz",
+      "number": 7,
+      "rating": {
+        "average": 7.7
+      },
+      "runtime": 49,
+      "season": 1,
+      "summary": "<p>Mark and the team encounter new security measures from Cobel.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2297221/severance-1x07-defiant-jazz"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2301245"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-04-01",
+      "airstamp": "2022-04-01T12:00:00+00:00",
+      "airtime": "",
+      "id": 2301245,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/402/1006127.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/402/1006127.jpg"
+      },
+      "name": "What's for Dinner?",
+      "number": 8,
+      "rating": {
+        "average": 8
+      },
+      "runtime": 46,
+      "season": 1,
+      "summary": "<p>The team prepares a plan. Mark attends Devon and Ricken's party.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2301245/severance-1x08-whats-for-dinner"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2302265"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2022-04-08",
+      "airstamp": "2022-04-08T12:00:00+00:00",
+      "airtime": "",
+      "id": 2302265,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/403/1008751.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/403/1008751.jpg"
+      },
+      "name": "The We We Are",
+      "number": 9,
+      "rating": {
+        "average": 8.5
+      },
+      "runtime": 40,
+      "season": 1,
+      "summary": "<p>Season finale. The team discovers troubling revelations.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2302265/severance-1x09-the-we-we-are"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939679"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-01-17",
+      "airstamp": "2025-01-17T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939679,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/552/1381306.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/552/1381306.jpg"
+      },
+      "name": "Hello, Ms. Cobel",
+      "number": 1,
+      "rating": {
+        "average": 8
+      },
+      "runtime": 48,
+      "season": 2,
+      "summary": "<p>Mark returns to work under different circumstances. Secrets from the Outie world come to light.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939679/severance-2x01-hello-ms-cobel"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939702"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-01-24",
+      "airstamp": "2025-01-24T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939702,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/552/1381307.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/552/1381307.jpg"
+      },
+      "name": "Goodbye, Mrs. Selvig",
+      "number": 2,
+      "rating": {
+        "average": 7.8
+      },
+      "runtime": 46,
+      "season": 2,
+      "summary": "<p>Outie Mark contemplates the meaning of a message. Lumon grapples with the fallout of the Overtime Contingency.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939702/severance-2x02-goodbye-mrs-selvig"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939703"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-01-31",
+      "airstamp": "2025-01-31T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939703,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/553/1384260.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/553/1384260.jpg"
+      },
+      "name": "Who Is Alive?",
+      "number": 3,
+      "rating": {
+        "average": 7.8
+      },
+      "runtime": 53,
+      "season": 2,
+      "summary": "<p>Mark, Helly, Irving, and Dylan search for answers.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939703/severance-2x03-who-is-alive"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939704"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-02-07",
+      "airstamp": "2025-02-07T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939704,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/555/1387724.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/555/1387724.jpg"
+      },
+      "name": "Woe's Hollow",
+      "number": 4,
+      "rating": {
+        "average": 7.6
+      },
+      "runtime": 50,
+      "season": 2,
+      "summary": "<p>\u00a0The team participates in a group activity.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939704/severance-2x04-woes-hollow"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939705"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-02-14",
+      "airstamp": "2025-02-14T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939705,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/555/1387573.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/555/1387573.jpg"
+      },
+      "name": "Trojan's Horse",
+      "number": 5,
+      "rating": {
+        "average": 7.6
+      },
+      "runtime": 46,
+      "season": 2,
+      "summary": "<p>Tensions emerge after the team suffers a loss.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939705/severance-2x05-trojans-horse"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939706"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-02-21",
+      "airstamp": "2025-02-21T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939706,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/556/1392077.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/556/1392077.jpg"
+      },
+      "name": "Attila",
+      "number": 6,
+      "rating": {
+        "average": 7.6
+      },
+      "runtime": 48,
+      "season": 2,
+      "summary": "<p>Bonds are tested. Mark continues on his path of discovery.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939706/severance-2x06-attila"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939707"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-02-28",
+      "airstamp": "2025-02-28T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939707,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/556/1392078.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/556/1392078.jpg"
+      },
+      "name": "Chikhai Bardo",
+      "number": 7,
+      "rating": {
+        "average": 7.7
+      },
+      "runtime": 50,
+      "season": 2,
+      "summary": "<p>An old romance intersects with a deadly present threat.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939707/severance-2x07-chikhai-bardo"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939708"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-03-07",
+      "airstamp": "2025-03-07T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939708,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/558/1396933.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/558/1396933.jpg"
+      },
+      "name": "Sweet Vitriol",
+      "number": 8,
+      "rating": {
+        "average": 7.1
+      },
+      "runtime": 37,
+      "season": 2,
+      "summary": "<p>Discoveries are made.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939708/severance-2x08-sweet-vitriol"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939709"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-03-14",
+      "airstamp": "2025-03-14T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939709,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/558/1396934.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/558/1396934.jpg"
+      },
+      "name": "The After Hours",
+      "number": 9,
+      "rating": {
+        "average": 7.8
+      },
+      "runtime": 44,
+      "season": 2,
+      "summary": "<p>Mark and Devon team with an ally. Helly investigates further.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939709/severance-2x09-the-after-hours"
+    },
+    {
+      "_links": {
+        "self": {
+          "href": "https://api.tvmaze.com/episodes/2939710"
+        },
+        "show": {
+          "href": "https://api.tvmaze.com/shows/44933",
+          "name": "Severance"
+        }
+      },
+      "airdate": "2025-03-21",
+      "airstamp": "2025-03-21T12:00:00+00:00",
+      "airtime": "",
+      "id": 2939710,
+      "image": {
+        "medium": "https://static.tvmaze.com/uploads/images/medium_landscape/559/1398936.jpg",
+        "original": "https://static.tvmaze.com/uploads/images/original_untouched/559/1398936.jpg"
+      },
+      "name": "Cold Harbor",
+      "number": 10,
+      "rating": {
+        "average": 8.2
+      },
+      "runtime": 75,
+      "season": 2,
+      "summary": "<p>Season finale. Mark forms a shaky alliance in an all-or-nothing play, while the team makes a dangerous last stand.</p>",
+      "type": "regular",
+      "url": "https://www.tvmaze.com/episodes/2939710/severance-2x10-cold-harbor"
+    }
+  ],
+  "status": 200
+}

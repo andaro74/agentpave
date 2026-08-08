@@ -7,6 +7,7 @@ dependencies = [
     "agentpave-gateway",
     "agentpave-infra",
     "agentpave-registry",
+    "agentpave-mcp-tvmaze",
 ]
 
 # The repo root is a virtual project: it wires the workspace together but is
@@ -21,12 +22,14 @@ members = [
     "platform/gateway",
     "platform/infra",
     "platform/registry",
+    "platform/mcp-tvmaze",
 ]
 
 [tool.uv.sources]
 agentpave-gateway = { workspace = true }
 agentpave-infra = { workspace = true }
 agentpave-registry = { workspace = true }
+agentpave-mcp-tvmaze = { workspace = true }
 
 [dependency-groups]
 dev = [
