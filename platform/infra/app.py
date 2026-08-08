@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import aws_cdk as cdk
+from agentpave_infra.stacks.eval_stack import EvalStack
 from agentpave_infra.stacks.gateway_stack import GatewayStack
 from agentpave_infra.stacks.mcp_tvmaze_stack import McpTvmazeStack
 
@@ -42,6 +43,12 @@ McpTvmazeStack(
     f"AgentPave-Mcp-{STAGE}",
     asset_path=os.environ.get("AGENTPAVE_MCP_ASSET", str(DEFAULT_MCP_ASSET)),
     description="AgentPave tvmaze-catalog MCP server: registry-governed tools",
+)
+
+EvalStack(
+    app,
+    f"AgentPave-Eval-{STAGE}",
+    description="AgentPave eval service: baseline score store",
 )
 
 app.synth()
