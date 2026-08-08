@@ -1,0 +1,19 @@
+[project]
+name = "agentpave-gateway"
+version = "0.0.1"
+description = "AgentPave LLM Gateway: routing, guardrails, metering"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    # Provided by the Lambda runtime at execution time; declared here so unit
+    # tests and the metering writer's type surface resolve locally.
+    "boto3>=1.35",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agentpave_gateway"]

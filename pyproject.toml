@@ -3,7 +3,27 @@ name = "agentpave"
 version = "0.0.1"
 description = "Miniature agentic AI developer platform on AWS with QA baked in"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "agentpave-gateway",
+    "agentpave-infra",
+]
+
+# The repo root is a virtual project: it wires the workspace together but is
+# never itself built or installed.
+[tool.uv]
+package = false
+
+# Components are listed explicitly, not globbed — a member arrives when its
+# milestone does (registry + mcp-tvmaze in M02, evalsvc in M03).
+[tool.uv.workspace]
+members = [
+    "platform/gateway",
+    "platform/infra",
+]
+
+[tool.uv.sources]
+agentpave-gateway = { workspace = true }
+agentpave-infra = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -21,3 +41,11 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["platform", "pave", "templates", "services", "tests"]
 addopts = "-ra"
+# NOTE: do not set `--import-mode=importlib` here. It derives module names from
+# the path relative to rootdir, so `platform/infra/tests/x.py` becomes
+# `platform.infra.tests.x` and the synthesised `platform` parent replaces the
+# stdlib module of that name in sys.modules — attrs, and therefore the whole
+# CDK import chain, dies on it. The default `prepend` mode names test modules
+# by basename and never invents a `platform` package. Test files are therefore
+# prefixed by component (`test_gateway_*`, `test_registry_*`) to keep basenames
+# unique across the monorepo, which prepend mode requires.
