@@ -1,0 +1,277 @@
+# The golden dataset: 30 cases over recorded TVMaze fixtures.
+#
+# Drafted by Claude with the `eval-case-author` skill, then curated by hand.
+# The curation rate is recorded in docs/VALIDATION.md — ARCHITECTURE.md §6 asks
+# for it to be published, because a dataset nobody edited is a dataset nobody
+# checked.
+#
+# Every expectation here is grounded in a committed fixture. Nothing asserts a
+# fact the fixtures do not contain, which is the point: a case that expects
+# something only the model's training data knows is testing recall, not
+# grounding, and would go green against a hallucination.
+#
+# `must_not_contain` entries are hallucination bait — plausible facts absent
+# from the fixture. The Severance fixture is especially good for this: TVMaze
+# records `network: null` and `webChannel: Apple TV`, and a model answering
+# from memory reliably reaches for a broadcast network.
+
+cases:
+  # ── airing: what network / when does it air ──────────────────────────────
+  - case_id: airing-severance-channel
+    capability: airing
+    grading: judged
+    prompt: What channel or network airs Severance?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["Apple TV"]
+    must_not_contain: ["HBO", "Netflix", "AMC"]
+
+  - case_id: airing-severance-status
+    capability: airing
+    grading: judged
+    prompt: Is Severance still running, and what was its most recent episode?
+    fixture: shows_44933_episodes.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["Cold Harbor"]
+    must_not_contain: ["season 3", "Season 3"]
+
+  - case_id: airing-severance-premiere
+    capability: airing
+    grading: judged
+    prompt: When did Severance premiere?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["2022"]
+
+  - case_id: airing-severance-last-airdate
+    capability: airing
+    grading: judged
+    prompt: What date did the latest episode of Severance air?
+    fixture: shows_44933_episodes.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["2025-03-21"]
+
+  - case_id: airing-schedule-abc-overnight
+    capability: airing
+    grading: judged
+    prompt: Which show airs on ABC in the overnight block on this schedule?
+    fixture: schedule__country-us__date-2026-08-07.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["ABC World News Now"]
+
+  - case_id: airing-schedule-fox-friends-first
+    capability: airing
+    grading: judged
+    prompt: What network airs FOX & Friends First, and at what time?
+    fixture: schedule__country-us__date-2026-08-07.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["Fox News Channel", "05:00"]
+
+  - case_id: airing-schedule-date
+    capability: airing
+    grading: judged
+    prompt: What date does this US schedule cover?
+    fixture: schedule__country-us__date-2026-08-07.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["2026-08-07"]
+
+  - case_id: airing-unknown-show
+    capability: airing
+    grading: judged
+    prompt: What network airs the show zzzz-no-such-show?
+    fixture: search_shows__q-zzzz-no-such-show.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    # The grounded answer is "no such show". Naming any network at all is the
+    # failure this case exists to catch.
+    must_not_contain: ["ABC", "CBS", "NBC", "Apple TV"]
+
+  # ── summarize: two sentences with genres ─────────────────────────────────
+  - case_id: summarize-severance-two-sentences
+    capability: summarize
+    grading: judged
+    prompt: Summarize Severance in two sentences, and list its genres.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["Drama", "Science-Fiction", "Mystery"]
+
+  - case_id: summarize-severance-premise
+    capability: summarize
+    grading: judged
+    prompt: In one sentence, what is the premise of Severance?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["Lumon"]
+
+  - case_id: summarize-severance-protagonist
+    capability: summarize
+    grading: judged
+    prompt: Who leads the team at the centre of Severance?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["Mark"]
+
+  - case_id: summarize-aligned-reverence
+    capability: summarize
+    grading: judged
+    prompt: Summarize Aligned Reverence in two sentences with its genres.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["Romance"]
+
+  - case_id: summarize-episode-one
+    capability: summarize
+    grading: judged
+    prompt: Summarize the first episode of Severance in one sentence.
+    fixture: shows_44933_episodes.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["Good News About Hell"]
+
+  - case_id: summarize-season-two-finale
+    capability: summarize
+    grading: judged
+    prompt: What is the title of the season 2 finale of Severance, and what number episode is it?
+    fixture: shows_44933_episodes.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["Cold Harbor", "10"]
+
+  - case_id: summarize-schedule-overview
+    capability: summarize
+    grading: judged
+    prompt: In two sentences, what kind of programming dominates this US schedule?
+    fixture: schedule__country-us__date-2026-08-07.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+    # The schedule is overwhelmingly cable news. Any answer grounded in the
+    # fixture reaches that conclusion; one that does not, was not reading it.
+    must_contain: ["news"]
+
+  - case_id: summarize-no-results
+    capability: summarize
+    grading: judged
+    prompt: Summarize the show zzzz-no-such-show in two sentences.
+    fixture: search_shows__q-zzzz-no-such-show.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_not_contain: ["Drama", "Comedy"]
+
+  # ── running: which of these are currently running ────────────────────────
+  - case_id: running-severance-search-set
+    capability: running
+    grading: judged
+    prompt: Which of these shows are currently running?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    # Of the three search hits only Severance has status "Running"; the other
+    # two are "Ended". This is the cleanest running case in the fixtures.
+    must_contain: ["Severance"]
+    must_not_contain: ["all three", "All three"]
+
+  - case_id: running-aligned-reverence-ended
+    capability: running
+    grading: judged
+    prompt: Has Aligned Reverence ended?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["Ended"]
+
+  - case_id: running-la-riviere-esperance
+    capability: running
+    grading: judged
+    prompt: Is La Rivière Espérance still in production?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["Ended"]
+
+  - case_id: running-count-of-running
+    capability: running
+    grading: judged
+    prompt: How many of these shows are still running?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["one"]
+
+  - case_id: running-severance-status-word
+    capability: running
+    grading: judged
+    prompt: What status does the catalogue record for Severance?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["Running"]
+
+  - case_id: running-empty-set
+    capability: running
+    grading: judged
+    prompt: Which of these shows are currently running?
+    fixture: search_shows__q-zzzz-no-such-show.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_not_contain: ["Severance"]
+
+  # ── enrichment: structured metadata record ───────────────────────────────
+  # All deterministic: the schema is asserted, not judged. `must_contain` on a
+  # JSON body checks the value landed in the record at all; the schema assert
+  # checks its shape and the ≤50-word summary cap.
+  - case_id: enrichment-severance
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for Severance.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+    must_contain: ["Severance", "Apple TV", "Running"]
+
+  - case_id: enrichment-severance-genres
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for Severance, including all genres.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+    must_contain: ["Drama", "Science-Fiction", "Mystery"]
+
+  - case_id: enrichment-severance-runtime
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for Severance with its runtime.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+    must_contain: ["49"]
+
+  - case_id: enrichment-aligned-reverence
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for Aligned Reverence.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+    must_contain: ["Aligned Reverence", "Ended"]
+
+  - case_id: enrichment-la-riviere-esperance
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for La Rivière Espérance.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+    must_contain: ["France 2"]
+
+  - case_id: enrichment-null-network
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for Severance. The network field must reflect the catalogue exactly.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+    # TVMaze records network: null for Severance — it carries a webChannel
+    # instead. A record that invents a broadcast network here is the exact
+    # failure structured output is supposed to make visible.
+    must_not_contain: ["NBC", "CBS", "HBO"]
+
+  - case_id: enrichment-summary-cap
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for Severance with a summary of at most 50 words.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+
+  - case_id: enrichment-unknown-show
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for zzzz-no-such-show.
+    fixture: search_shows__q-zzzz-no-such-show.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    # An empty search result still has to produce a well-formed record; the
+    # schema assert is what proves the model did not answer with prose.
+    must_not_contain: ["Drama", "Running"]

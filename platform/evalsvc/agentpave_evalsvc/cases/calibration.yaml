@@ -1,0 +1,100 @@
+# Judge calibration: 10 hand-labeled answers.
+#
+# These are answers captured from real runs against the golden cases, then
+# labeled by a person. The judge scores them, and `calibration.py` reports how
+# often it agreed. The figure is published in docs/VALIDATION.md, because a
+# judge whose agreement with a human is unknown is a judge whose scores mean
+# nothing (ROADMAP.md M03).
+#
+# Deliberately balanced: five answers a person passed, five they failed. A set
+# that is all-good or all-bad produces a high agreement rate from a judge that
+# has learned to say one word, which is the failure mode calibration exists to
+# detect.
+#
+# The hard cases are the near-misses — fluent, confident answers carrying one
+# ungrounded fact. Those are what separate a judge that reads the fixture from
+# one that rewards prose.
+
+samples:
+  # ── answers a human passed ───────────────────────────────────────────────
+  - case_id: airing-severance-channel
+    human_pass: true
+    note: correct, grounded, and does not invent a broadcast network
+    answer: >-
+      Severance streams on Apple TV. The catalogue records no traditional
+      broadcast network for it — it is listed with a web channel instead.
+
+  - case_id: running-severance-search-set
+    human_pass: true
+    note: picks out the one running show and says why the others are not
+    answer: >-
+      Only Severance is currently running. Aligned Reverence and La Rivière
+      Espérance are both recorded as Ended.
+
+  - case_id: summarize-severance-two-sentences
+    human_pass: true
+    note: two sentences, all three genres, premise matches the fixture summary
+    answer: >-
+      Severance follows Mark Scout, who leads a team at Lumon Industries whose
+      employees have had their memories surgically divided between work and
+      personal life. It is listed under the genres Drama, Science-Fiction and
+      Mystery.
+
+  - case_id: airing-severance-status
+    human_pass: true
+    note: correct status and correct latest episode; no invented third season
+    answer: >-
+      Severance is still running. Its most recent episode is Cold Harbor, the
+      tenth episode of season 2, which aired on 2025-03-21.
+
+  - case_id: summarize-no-results
+    human_pass: true
+    note: >-
+      the right answer to an empty search is to say so; refusing to invent is
+      the behaviour under test
+    answer: >-
+      There is no show by that name in the catalogue — the search returned no
+      results, so there is nothing to summarize.
+
+  # ── answers a human failed ───────────────────────────────────────────────
+  - case_id: airing-severance-channel
+    human_pass: false
+    note: >-
+      fluent and confident, and wrong — AMC appears nowhere in the fixture.
+      This is the near-miss the judge most needs to catch.
+    answer: >-
+      Severance airs on AMC on Friday nights, and new episodes stream the
+      following day.
+
+  - case_id: airing-severance-status
+    human_pass: false
+    note: invents a third season the episode list does not contain
+    answer: >-
+      Severance is running and is currently airing its third season; the most
+      recent episode aired earlier this month.
+
+  - case_id: running-severance-search-set
+    human_pass: false
+    note: >-
+      says all three are running when two are recorded as Ended — reads the
+      result set without reading the status field
+    answer: >-
+      All three shows — Severance, Aligned Reverence and La Rivière Espérance —
+      are currently running.
+
+  - case_id: summarize-severance-two-sentences
+    human_pass: false
+    note: >-
+      grounded and accurate but answers a question nobody asked; the case asks
+      for a summary with genres and gets neither
+    answer: >-
+      Severance holds an average rating of 7.7 and premiered on 2022-02-18.
+
+  - case_id: summarize-no-results
+    human_pass: false
+    note: >-
+      hallucinates an entire show from an empty result set — the single worst
+      outcome this dataset can produce
+    answer: >-
+      zzzz-no-such-show is a drama series about a group of researchers in a
+      remote station. It premiered to strong reviews and is currently running.
