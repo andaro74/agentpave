@@ -1,0 +1,29 @@
+{
+  "": {
+    "entityTypes": {
+      "Agent": {
+        "shape": { "type": "Record", "attributes": {} }
+      },
+      "ToolGroup": {
+        "shape": { "type": "Record", "attributes": {} }
+      },
+      "Tool": {
+        "memberOfTypes": ["ToolGroup"],
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "consequence": { "type": "String", "required": true }
+          }
+        }
+      }
+    },
+    "actions": {
+      "invoke": {
+        "appliesTo": {
+          "principalTypes": ["Agent"],
+          "resourceTypes": ["Tool"]
+        }
+      }
+    }
+  }
+}
