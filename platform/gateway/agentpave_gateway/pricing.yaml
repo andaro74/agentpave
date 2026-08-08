@@ -1,0 +1,25 @@
+# Token prices, in USD per million tokens.
+#
+# These are Anthropic's published list rates, verified 2026-08-07 against
+# https://platform.claude.com/docs/en/about-claude/models/overview
+#
+# ⚠️ Bedrock is partner-operated and prices separately from the first-party
+# API. The Bedrock pricing page does not publish machine-readable rows for
+# these models, so the figures below are a documented *estimate* until
+# reconciled against a real invoice — see ADR-006. Metering rows record
+# `price_basis`, so rows written under one basis stay comparable after a
+# correction rather than being silently restated.
+#
+# Keys are Bedrock model identifiers exactly as they appear in .env.
+
+version: 1
+basis: anthropic-list-2026-08-07
+
+models:
+  us.anthropic.claude-haiku-4-5-20251001-v1:0:
+    input_per_mtok: "1.00"
+    output_per_mtok: "5.00"
+
+  us.anthropic.claude-sonnet-4-6:
+    input_per_mtok: "3.00"
+    output_per_mtok: "15.00"
