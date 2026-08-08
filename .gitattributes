@@ -1,0 +1,8 @@
+# Recorded fixtures and policy files are compared across machines and CI. Left
+# to platform defaults, a re-record on Linux would rewrite every line of a
+# Windows-recorded fixture and bury the real change in the diff.
+* text=auto eol=lf
+
+*.json text eol=lf
+*.yaml text eol=lf
+*.cedar text eol=lf

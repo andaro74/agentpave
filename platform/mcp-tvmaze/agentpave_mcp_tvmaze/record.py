@@ -50,7 +50,13 @@ def record_all(fixture_dir: Path | None = None) -> list[Path]:
                 raise
             payload = {"status": 404, "body": None}
 
-        destination.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        # Explicit LF: a fixture recorded on Windows and re-recorded on Linux
+        # would otherwise differ on every line, burying the real change.
+        destination.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
         written.append(destination)
         print(f"recorded {destination.name}")
 
