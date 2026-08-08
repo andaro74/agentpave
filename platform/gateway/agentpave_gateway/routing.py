@@ -24,7 +24,14 @@ from .models import DataClassification, RoutingDecision
 # deterministically by the eval suite; the smaller model's schema adherence is
 # not reliable enough to grade. ARCHITECTURE.md §3: "Haiku default, Sonnet
 # routed for enrichment".
-CAPABLE_FEATURES = frozenset({"enrichment"})
+#
+# `judge` joined it in M03. It has to be listed explicitly, because rule 2
+# below defaults *open* to the fast model: an unlisted `judge` feature would
+# have graded every answer with a model no more capable than the one that
+# produced it, and the suite would have gone green while measuring nothing.
+# Nothing about that failure is visible in a scorecard, which is why it is a
+# routing entry with a test rather than a convention.
+CAPABLE_FEATURES = frozenset({"enrichment", "judge"})
 
 _SENSITIVE_REFUSAL = (
     "data classification 'sensitive' is refused by design: this platform has no "
