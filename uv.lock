@@ -58,12 +58,14 @@ name = "agentpave-infra"
 version = "0.0.1"
 source = { editable = "platform/infra" }
 dependencies = [
+    { name = "agentpave-gateway" },
     { name = "aws-cdk-lib" },
     { name = "constructs" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "agentpave-gateway", editable = "platform/gateway" },
     { name = "aws-cdk-lib", specifier = ">=2.150" },
     { name = "constructs", specifier = ">=10.3" },
 ]

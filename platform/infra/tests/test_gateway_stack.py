@@ -12,6 +12,7 @@ from typing import Any
 
 import aws_cdk as cdk
 import pytest
+from agentpave_gateway.guardrail import load_policy
 from agentpave_infra.stacks.gateway_stack import GatewayStack
 from aws_cdk.assertions import Match, Template
 
@@ -23,6 +24,7 @@ GATEWAY_ASSET = REPO_ROOT / "platform" / "gateway"
 # at all.
 EXPECTED_ACTIONS = {
     "bedrock:InvokeModel",
+    "bedrock:ApplyGuardrail",
     "dynamodb:PutItem",
     "logs:CreateLogStream",
     "logs:PutLogEvents",
@@ -128,3 +130,65 @@ def test_function_url_requires_iam_auth(template: Template) -> None:
 def test_log_group_has_bounded_retention(template: Template) -> None:
     # Never-expiring logs are a slow leak that bills while idle.
     template.has_resource_properties("AWS::Logs::LogGroup", {"RetentionInDays": Match.any_value()})
+
+
+# ── guardrail ─────────────────────────────────────────────────────────────
+
+
+def test_stack_renders_exactly_one_guardrail(template: Template) -> None:
+    template.resource_count_is("AWS::Bedrock::Guardrail", 1)
+
+
+def test_guardrail_carries_the_authored_policy(template: Template) -> None:
+    # The YAML is the source of truth; this asserts it actually reaches
+    # CloudFormation rather than being decorative.
+    policy = load_policy()
+    template.has_resource_properties(
+        "AWS::Bedrock::Guardrail",
+        {
+            "BlockedInputMessaging": policy.blocked_input_message,
+            "BlockedOutputsMessaging": policy.blocked_output_message,
+        },
+    )
+
+
+def test_guardrail_filters_prompt_attack(template: Template) -> None:
+    # The one filter the M03 adversarial gate depends on.
+    template.has_resource_properties(
+        "AWS::Bedrock::Guardrail",
+        {
+            "ContentPolicyConfig": {
+                "FiltersConfig": Match.array_with(
+                    [Match.object_like({"Type": "PROMPT_ATTACK", "InputStrength": "HIGH"})]
+                )
+            }
+        },
+    )
+
+
+def test_guardrail_permission_is_scoped_to_this_guardrail(template: Template) -> None:
+    # `bedrock:ApplyGuardrail` on `*` would let the gateway apply — or claim to
+    # apply — a guardrail this stack does not own.
+    statements = [s for s in _statements(template) if "bedrock:ApplyGuardrail" in _actions(s)]
+    assert len(statements) == 1
+
+    resources = _resources(statements[0])
+    assert resources != ["*"]
+    assert all("GatewayGuardrail" in str(r) for r in resources)
+
+
+def test_function_is_told_which_guardrail_to_apply(template: Template) -> None:
+    # The handler fails closed without these, so the stack must supply them.
+    template.has_resource_properties(
+        "AWS::Lambda::Function",
+        {
+            "Environment": {
+                "Variables": Match.object_like(
+                    {
+                        "AGENTPAVE_GUARDRAIL_ID": Match.any_value(),
+                        "AGENTPAVE_GUARDRAIL_VERSION": Match.any_value(),
+                    }
+                )
+            }
+        },
+    )

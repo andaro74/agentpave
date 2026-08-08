@@ -7,12 +7,19 @@ rather than via a `grant_*` helper so that the permission set is small enough
 to assert on character by character (see tests/test_gateway_stack.py).
 """
 
+from agentpave_gateway.guardrail import load_policy
 from aws_cdk import Duration, RemovalPolicy, Stack
+from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from constructs import Construct
+
+from agentpave_infra.guardrail_render import (
+    content_policy_config,
+    sensitive_information_policy_config,
+)
 
 
 class GatewayStack(Stack):
@@ -58,6 +65,28 @@ class GatewayStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
+        # ── Guardrail ─────────────────────────────────────────────────────
+        # Rendered from the authored YAML at synth time. The policy file is the
+        # source of truth; this construct is its deployed form, and the gateway
+        # only ever learns the resulting identifier. Enforcement is Bedrock's.
+        policy = load_policy()
+        self.guardrail = bedrock.CfnGuardrail(
+            self,
+            "GatewayGuardrail",
+            name=f"{policy.name}-{construct_id.split('-')[-1]}",
+            description=policy.description,
+            blocked_input_messaging=policy.blocked_input_message,
+            blocked_outputs_messaging=policy.blocked_output_message,
+            content_policy_config=content_policy_config(policy),
+            sensitive_information_policy_config=sensitive_information_policy_config(policy),
+        )
+
+        # DRAFT tracks the policy file: editing the YAML and redeploying moves
+        # the live guardrail with it. Pinned numbered versions are the right
+        # answer once more than one stage shares a guardrail, which is out of
+        # scope for a single-account demo (ADR-001).
+        guardrail_version = "DRAFT"
+
         # ── Execution role ────────────────────────────────────────────────
         self.gateway_role = iam.Role(
             self,
@@ -78,6 +107,17 @@ class GatewayStack(Stack):
                     "arn:aws:bedrock:*::foundation-model/anthropic.*",
                     f"arn:aws:bedrock:*:{self.account}:inference-profile/*.anthropic.*",
                 ],
+            )
+        )
+
+        # Applying a guardrail on InvokeModel needs its own permission, scoped
+        # to this guardrail. Without it the call fails closed — Bedrock refuses
+        # the request rather than quietly serving it unguarded.
+        self.gateway_role.add_to_policy(
+            iam.PolicyStatement(
+                sid="ApplyGatewayGuardrail",
+                actions=["bedrock:ApplyGuardrail"],
+                resources=[self.guardrail.attr_guardrail_arn],
             )
         )
 
@@ -108,6 +148,10 @@ class GatewayStack(Stack):
                 "AGENTPAVE_METERING_TABLE": self.metering_table.table_name,
                 "AGENTPAVE_MODEL_SERVE": model_serve,
                 "AGENTPAVE_MODEL_JUDGE": model_judge,
+                # The handler refuses to invoke a model when these are unset:
+                # an unguarded call is worse than no call.
+                "AGENTPAVE_GUARDRAIL_ID": self.guardrail.attr_guardrail_id,
+                "AGENTPAVE_GUARDRAIL_VERSION": guardrail_version,
             },
         )
 

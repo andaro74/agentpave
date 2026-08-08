@@ -6,7 +6,14 @@ requires-python = ">=3.12"
 dependencies = [
     "aws-cdk-lib>=2.150",
     "constructs>=10.3",
+    # The guardrail policy schema lives with the gateway; infra renders it into
+    # CloudFormation. The dependency points this way on purpose — the gateway
+    # must never import CDK.
+    "agentpave-gateway",
 ]
+
+[tool.uv.sources]
+agentpave-gateway = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
