@@ -13,6 +13,7 @@ members = [
     "agentpave-gateway",
     "agentpave-infra",
     "agentpave-mcp-tvmaze",
+    "agentpave-pave",
     "agentpave-registry",
 ]
 
@@ -25,6 +26,7 @@ dependencies = [
     { name = "agentpave-gateway" },
     { name = "agentpave-infra" },
     { name = "agentpave-mcp-tvmaze" },
+    { name = "agentpave-pave" },
     { name = "agentpave-registry" },
 ]
 
@@ -40,6 +42,7 @@ requires-dist = [
     { name = "agentpave-gateway", editable = "platform/gateway" },
     { name = "agentpave-infra", editable = "platform/infra" },
     { name = "agentpave-mcp-tvmaze", editable = "platform/mcp-tvmaze" },
+    { name = "agentpave-pave", editable = "pave" },
     { name = "agentpave-registry", editable = "platform/registry" },
 ]
 
@@ -118,6 +121,17 @@ requires-dist = [
     { name = "mangum", specifier = ">=0.19" },
     { name = "mcp", specifier = ">=2.0" },
 ]
+
+[[package]]
+name = "agentpave-pave"
+version = "0.0.1"
+source = { editable = "pave" }
+dependencies = [
+    { name = "agentpave-evalsvc" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "agentpave-evalsvc", editable = "platform/evalsvc" }]
 
 [[package]]
 name = "agentpave-registry"

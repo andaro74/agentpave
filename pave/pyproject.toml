@@ -1,0 +1,28 @@
+[project]
+name = "agentpave-pave"
+version = "0.0.1"
+description = "The AgentPave platform CLI: new / eval / shadow-eval"
+requires-python = ">=3.12"
+dependencies = [
+    "agentpave-evalsvc",
+]
+
+# The command is `pave`; the module is `agentpave_pave`. They differ on
+# purpose. A module literally named `pave` inside a directory literally named
+# `pave/` is shadowed by that directory as a namespace package the moment the
+# repo root is on `sys.path` — which it is under pytest — and `import pave`
+# then resolves to the workspace folder instead of the installed package.
+# That is ADR-004's failure in a new costume, so this package follows the same
+# convention every other component already does: `agentpave_<component>`.
+[project.scripts]
+pave = "agentpave_pave.cli:main"
+
+[tool.uv.sources]
+agentpave-evalsvc = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agentpave_pave"]
