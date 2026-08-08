@@ -40,6 +40,19 @@ def principal_from_env() -> str:
     return os.environ.get("AGENTPAVE_AGENT_ID") or ANONYMOUS
 
 
+def client_from_env() -> TVMazeClient:
+    """Fixtures unless explicitly told otherwise.
+
+    The default is the safe one: a misconfigured deployment replays recordings
+    rather than silently putting a rate-limited third party in the request
+    path. Live mode has to be asked for.
+    """
+    mode = os.environ.get("AGENTPAVE_TVMAZE_MODE", "fixtures")
+    if mode not in ("fixtures", "live"):
+        raise ValueError(f"AGENTPAVE_TVMAZE_MODE must be 'fixtures' or 'live', not {mode!r}")
+    return TVMazeClient(mode=mode)
+
+
 def build_server(
     *,
     client: TVMazeClient | None = None,
@@ -47,7 +60,7 @@ def build_server(
     principal: Callable[[], str] = principal_from_env,
 ) -> MCPServer:
     """Assemble the MCP server. Every dependency is injectable for the suite."""
-    client = client or TVMazeClient()
+    client = client or client_from_env()
     authorizer = authorizer or Authorizer()
     registry = authorizer.registry
 
