@@ -169,3 +169,8 @@ class GatewayStack(Stack):
         CfnOutput(self, "FunctionUrl", value=self.function_url.url)
         CfnOutput(self, "MeteringTableName", value=self.metering_table.table_name)
         CfnOutput(self, "GuardrailId", value=self.guardrail.attr_guardrail_id)
+        # Published so an eval scorecard can record which models produced it.
+        # A baseline whose model pair is unknown is not comparable to the next
+        # run — a score change and a model change look identical after the fact.
+        CfnOutput(self, "ModelServe", value=model_serve)
+        CfnOutput(self, "ModelJudge", value=model_judge)
