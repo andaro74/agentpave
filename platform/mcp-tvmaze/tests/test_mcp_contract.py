@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from agentpave_registry.registry import Registry, load_registry
+from conftest import DeployedDriver, TransportError
 from jsonschema import Draft202012Validator
 
 SEVERANCE_ID = 44933
@@ -142,6 +143,23 @@ def test_contract_check_catches_schema_drift(driver: Any) -> None:
 
     assert violations, "the contract check accepted a response its schema should reject"
     assert any("network" in message for message in violations)
+
+
+def test_an_unreachable_endpoint_is_not_a_tool_error() -> None:
+    """The other way this suite could go toothless.
+
+    The first conformance run reported three deployed tests as PASSED against
+    an endpoint answering 403 to everything: the driver folded transport
+    failure into `ok=False`, which is precisely what those tests assert. Every
+    "this call must fail" test was therefore satisfied by nothing working.
+
+    Hermetic: port 1 on loopback refuses immediately, so this reaches no
+    network and needs no credentials.
+    """
+    dead = DeployedDriver("http://127.0.0.1:1/mcp", auth=None)
+
+    with pytest.raises(TransportError):
+        dead.call("search_show", HAPPY_PATH["search_show"])
 
 
 # ── error shapes ──────────────────────────────────────────────────────────
