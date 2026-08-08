@@ -10,6 +10,8 @@ dependencies = [
     # CloudFormation. The dependency points this way on purpose — the gateway
     # must never import CDK.
     "agentpave-gateway",
+    # Deployed-gate tooling only (smoke.py). Never reaches the Lambda asset.
+    "requests>=2.32",
 ]
 
 [tool.uv.sources]
