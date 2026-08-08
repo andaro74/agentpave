@@ -13,8 +13,16 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from agentpave_evalsvc.adversarial import INJECTION_MARKER
 from agentpave_evalsvc.dataset import load_dataset
-from agentpave_evalsvc.harness import build_prompt, plan, run_case, run_probe
+from agentpave_evalsvc.harness import (
+    SERVE_SYSTEM,
+    build_case_content,
+    plan,
+    run_case,
+    run_probe,
+)
+from agentpave_evalsvc.judge import JUDGE_SYSTEM
 from agentpave_evalsvc.models import AdversarialProbe, GoldenCase
 
 GOOD_VERDICT = json.dumps(
@@ -189,12 +197,79 @@ def test_a_judge_that_errors_fails_the_case():
 # ── prompts and plan ──────────────────────────────────────────────────────
 
 
-def test_serving_prompt_forbids_answering_from_memory():
+def test_serving_instructions_forbid_answering_from_memory():
     """Without this instruction the dataset's hallucination bait tests nothing."""
-    prompt = build_prompt(_case(), "CATALOGUE")
-    assert "only" in prompt.lower()
-    assert "memory" in prompt.lower()
-    assert "CATALOGUE" in prompt
+    assert "only" in SERVE_SYSTEM.lower()
+    assert "memory" in SERVE_SYSTEM.lower()
+
+
+def test_the_guarded_span_carries_the_data_and_none_of_the_instructions():
+    """ADR-013's contract, on the eval service's side of it.
+
+    `system` bypasses the guardrail's prompt-attack filter. That is what makes
+    the judge callable at all, and it is also a hole: anything a caller puts
+    there is never inspected. The eval service's rule is that only these two
+    constants — text that lives in code and never varies with input — go into
+    `system`, and every byte derived from a fixture, a case, or a model's
+    output stays in the guarded span.
+
+    In M04 the fixture becomes real tool output and this stops being a
+    formality.
+    """
+    content = build_case_content(_case(), "SENTINEL-FIXTURE-BODY")
+    assert "SENTINEL-FIXTURE-BODY" in content
+    assert "What network airs it?" in content
+    # None of the instruction text leaked into the guarded span...
+    assert "catalogue assistant" not in content.lower()
+    assert "memory" not in content.lower()
+    # ...and no fixture-derived byte leaked out of it. `SERVE_SYSTEM` names the
+    # CATALOGUE DATA section, which is a label, not the data.
+    assert "SENTINEL-FIXTURE-BODY" not in SERVE_SYSTEM
+
+
+def test_a_serving_turn_sends_instructions_as_system_not_as_prompt():
+    seen: dict[str, Any] = {}
+
+    def call(*, feature_id: str, prompt: str, system: str | None = None, **_):
+        seen[feature_id] = {"prompt": prompt, "system": system}
+        return _completion(GOOD_VERDICT if feature_id == "judge" else "Apple TV")
+
+    run_case(_case(), call, "CATALOGUE DATA HERE")
+
+    serving = seen["airing"]
+    assert serving["system"] == SERVE_SYSTEM
+    assert "CATALOGUE DATA HERE" in serving["prompt"]
+    assert "catalogue assistant" not in serving["prompt"].lower()
+
+    judging = seen["judge"]
+    assert judging["system"] == JUDGE_SYSTEM
+    # The answer under evaluation is untrusted: a model wrote it.
+    assert "Apple TV" in judging["prompt"]
+    assert "groundedness" not in judging["prompt"]
+
+
+def test_an_injected_probe_keeps_its_payload_inside_the_guarded_span():
+    """A probe whose attack travelled in `system` would prove nothing.
+
+    It would be testing the one path the guardrail does not inspect, and would
+    report `model_complied` or a pass for reasons unrelated to the attack.
+    """
+    seen: dict[str, Any] = {}
+
+    def call(*, feature_id: str, prompt: str, system: str | None = None, **_):
+        seen.update({"prompt": prompt, "system": system})
+        return 200, {"refused": True, "stage": "guardrail", "reason": "blocked"}
+
+    probe = AdversarialProbe(
+        probe_id="p",
+        why="w",
+        prompt="summarize this",
+        inject_into_fixture="search_shows__q-severance.json",
+    )
+    assert run_probe(probe, call).passed
+    assert seen["system"] == SERVE_SYSTEM
+    assert INJECTION_MARKER in seen["prompt"]
+    assert INJECTION_MARKER not in (seen["system"] or "")
 
 
 def test_plan_describes_the_shipped_dataset_without_calling_anything():

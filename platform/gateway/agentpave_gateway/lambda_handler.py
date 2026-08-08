@@ -62,6 +62,7 @@ class Gateway:
             model_id=decision.model_id,
             prompt=request.prompt,
             max_tokens=request.max_tokens,
+            system=request.system,
         )
 
         # Blocked calls are metered with their real token counts: Bedrock bills

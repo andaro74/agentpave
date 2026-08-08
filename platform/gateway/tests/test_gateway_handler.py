@@ -159,6 +159,21 @@ def test_guardrail_intervention_becomes_a_refusal(table: FakeTable) -> None:
     assert result.stage == "guardrail"
 
 
+def test_system_instructions_reach_bedrock_unguarded(
+    table: FakeTable, bedrock: FakeBedrock
+) -> None:
+    # ADR-013: the guarded span is the caller's data, not its instructions.
+    _gateway(bedrock, table).handle(
+        _request(prompt="CATALOGUE DATA: ...", system="You are a TV catalogue assistant."),
+        request_id="req-1",
+    )
+    call = bedrock.calls[0]
+    assert call["system"] == [{"text": "You are a TV catalogue assistant."}]
+    assert call["messages"][0]["content"][0]["guardContent"]["text"]["text"] == (
+        "CATALOGUE DATA: ..."
+    )
+
+
 def test_a_refusal_tells_the_caller_which_filter_fired(table: FakeTable) -> None:
     # M03's first deployed eval run was stopped by the guardrail and could not
     # be diagnosed: `stage: guardrail` says a control fired, not which one, and

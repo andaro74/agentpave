@@ -77,19 +77,48 @@ class BedrockInvoker:
         self._guardrail_id = guardrail_id
         self._guardrail_version = guardrail_version
 
-    def invoke(self, *, model_id: str, prompt: str, max_tokens: int) -> InvocationResult:
-        response = self._client.converse(
-            modelId=model_id,
-            # The prompt is wrapped in guardContent so the guarded span is
-            # explicit in the request rather than implied by a default.
-            messages=[{"role": "user", "content": [{"guardContent": {"text": {"text": prompt}}}]}],
-            inferenceConfig={"maxTokens": max_tokens},
-            guardrailConfig={
+    def invoke(
+        self,
+        *,
+        model_id: str,
+        prompt: str,
+        max_tokens: int,
+        system: str | None = None,
+    ) -> InvocationResult:
+        """Send one guarded turn.
+
+        `prompt` is the untrusted span: tool output, a user's question, an
+        answer being graded. `system` is the caller's own instructions, which
+        it wrote and Bedrock is told to treat as such.
+
+        The split is not cosmetic. Everything inside `guardContent` is offered
+        to `PROMPT_ATTACK` as material that might be an injection, so a caller
+        that folds its instructions into `prompt` is asking the filter whether
+        its own system prompt looks like an attack on itself. It does — that is
+        what an instruction inside untrusted input is — and M03's first
+        deployed eval run was blocked exactly this way (ADR-013).
+        """
+        request: dict[str, Any] = {
+            "modelId": model_id,
+            # Wrapped in guardContent so the guarded span is explicit in the
+            # request rather than implied by a Bedrock default.
+            "messages": [
+                {"role": "user", "content": [{"guardContent": {"text": {"text": prompt}}}]}
+            ],
+            "inferenceConfig": {"maxTokens": max_tokens},
+            "guardrailConfig": {
                 "guardrailIdentifier": self._guardrail_id,
                 "guardrailVersion": self._guardrail_version,
                 "trace": GUARDRAIL_TRACE,
             },
-        )
+        }
+        # Omitted rather than sent empty: a caller with no instructions of its
+        # own should produce a request indistinguishable from one that predates
+        # this parameter.
+        if system:
+            request["system"] = [{"text": system}]
+
+        response = self._client.converse(**request)
 
         usage = response.get("usage", {})
         return InvocationResult(

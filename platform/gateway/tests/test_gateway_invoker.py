@@ -68,6 +68,47 @@ def test_prompt_is_wrapped_in_guard_content(invoker: BedrockInvoker, client: Fak
     assert content["guardContent"]["text"]["text"] == "what airs tonight?"
 
 
+# ── the guarded span ──────────────────────────────────────────────────────
+#
+# ADR-013. `prompt` is untrusted and guarded; `system` is the caller's own
+# instructions and is not. Getting this backwards is what blocked M03's first
+# deployed eval run, and getting it backwards the *other* way would route
+# untrusted data around the platform's main injection defence.
+
+
+def test_system_instructions_travel_outside_the_guarded_span(
+    invoker: BedrockInvoker, client: FakeBedrock
+) -> None:
+    invoker.invoke(
+        model_id=HAIKU,
+        prompt="CATALOGUE DATA: ...",
+        system="You are a TV catalogue assistant.",
+        max_tokens=64,
+    )
+    call = client.calls[0]
+    assert call["system"] == [{"text": "You are a TV catalogue assistant."}]
+    # And emphatically not inside guardContent, where PROMPT_ATTACK would read
+    # our own instructions as an injection against ourselves.
+    guarded = call["messages"][0]["content"][0]["guardContent"]["text"]["text"]
+    assert guarded == "CATALOGUE DATA: ..."
+    assert "TV catalogue assistant" not in guarded
+
+
+def test_a_caller_with_no_instructions_sends_no_system_field(
+    invoker: BedrockInvoker, client: FakeBedrock
+) -> None:
+    # A request that predates this parameter must look exactly as it did.
+    invoker.invoke(model_id=HAIKU, prompt="hi", max_tokens=64)
+    assert "system" not in client.calls[0]
+
+
+def test_an_empty_system_is_omitted_rather_than_sent_blank(
+    invoker: BedrockInvoker, client: FakeBedrock
+) -> None:
+    invoker.invoke(model_id=HAIKU, prompt="hi", system="", max_tokens=64)
+    assert "system" not in client.calls[0]
+
+
 def test_model_and_max_tokens_are_passed_through(
     invoker: BedrockInvoker, client: FakeBedrock
 ) -> None:

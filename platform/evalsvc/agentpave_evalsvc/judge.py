@@ -68,20 +68,21 @@ class JudgeError(Exception):
     """The judge's reply could not be turned into a verdict."""
 
 
-def build_judge_prompt(case: GoldenCase, source: str, answer: str) -> str:
-    """Assemble the judge turn.
+def build_judge_content(case: GoldenCase, source: str, answer: str) -> str:
+    """The material to be graded — and nothing else.
+
+    Named `content` rather than `prompt` because the distinction is the whole
+    point: this is the span the gateway hands to the guardrail as untrusted.
+    `JUDGE_SYSTEM` travels separately, in the request's `system` field, because
+    instructions folded in here are read by `PROMPT_ATTACK` as an injection and
+    the call is blocked before any grading happens (ADR-013).
 
     The source is truncated because a 147-entry schedule fixture is mostly
     repetition, and a judge prompt that spends its context on the 140th cable
     news listing grades no better for it. The cap is generous enough that
     every fact the golden cases assert on survives it.
     """
-    return (
-        f"{JUDGE_SYSTEM}\n"
-        f"SOURCE:\n{source[:12000]}\n\n"
-        f"QUESTION:\n{case.prompt}\n\n"
-        f"ANSWER:\n{answer}\n"
-    )
+    return f"SOURCE:\n{source[:12000]}\n\nQUESTION:\n{case.prompt}\n\nANSWER:\n{answer}\n"
 
 
 def parse_verdict(reply: str) -> JudgeVerdict:

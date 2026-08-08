@@ -27,7 +27,7 @@ from . import baseline as baseline_mod
 from . import calibration as calibration_mod
 from . import scorecard as scorecard_mod
 from .harness import SERVICE_ID, Caller, run
-from .judge import JUDGE_FEATURE, build_judge_prompt, parse_verdict
+from .judge import JUDGE_FEATURE, JUDGE_SYSTEM, build_judge_content, parse_verdict
 from .models import Baseline, CalibrationSample, Dataset, JudgeVerdict
 
 
@@ -51,18 +51,20 @@ def _signed_caller(url: str) -> Caller:
         *,
         feature_id: str,
         prompt: str,
+        system: str | None = None,
         classification: str = "internal",
         max_tokens: int = 512,
     ) -> tuple[int, dict[str, Any]]:
-        payload = json.dumps(
-            {
-                "service_id": SERVICE_ID,
-                "feature_id": feature_id,
-                "prompt": prompt,
-                "classification": classification,
-                "max_tokens": max_tokens,
-            }
-        )
+        body: dict[str, Any] = {
+            "service_id": SERVICE_ID,
+            "feature_id": feature_id,
+            "prompt": prompt,
+            "classification": classification,
+            "max_tokens": max_tokens,
+        }
+        if system:
+            body["system"] = system
+        payload = json.dumps(body)
         request = AWSRequest(
             method="POST",
             url=url,
@@ -94,7 +96,8 @@ def _live_scorer(call: Caller, dataset: Dataset):
         case = cases[sample.case_id]
         status, body = call(
             feature_id=JUDGE_FEATURE,
-            prompt=build_judge_prompt(case, load_fixture(case.fixture), sample.answer),
+            prompt=build_judge_content(case, load_fixture(case.fixture), sample.answer),
+            system=JUDGE_SYSTEM,
             max_tokens=512,
         )
         if status != 200 or body.get("refused") is True or "completion" not in body:

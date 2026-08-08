@@ -2,6 +2,7 @@
 
 import pytest
 from agentpave_gateway.models import (
+    SYSTEM_MAX_CHARS,
     GatewayCompletion,
     GatewayRefusal,
     GatewayRequest,
@@ -15,6 +16,40 @@ def test_request_defaults_to_internal_classification() -> None:
     req = GatewayRequest(service_id="catalog-agent", feature_id="summarize", prompt="hi")
     assert req.classification == "internal"
     assert req.max_tokens == 512
+    # No instructions unless a caller supplies them.
+    assert req.system is None
+
+
+def test_system_instructions_are_capped() -> None:
+    """The only part of ADR-013's contract a machine can enforce.
+
+    `system` skips the guardrail's prompt-attack filter, so the tempting fix
+    for any future block is to move the offending text there. A cap makes that
+    fail at the boundary for anything fixture-sized instead of succeeding
+    quietly at a model.
+
+    It bounds the damage; it does not prevent it. A short injection still fits,
+    and nothing here can tell instructions from data. That is why the contract
+    is an ADR and a review item, not just a number.
+    """
+    with pytest.raises(ValidationError, match="at most"):
+        GatewayRequest(
+            service_id="catalog-agent",
+            feature_id="summarize",
+            prompt="hi",
+            system="x" * (SYSTEM_MAX_CHARS + 1),
+        )
+
+
+def test_a_realistic_system_prompt_fits_the_cap() -> None:
+    # A cap that rejected a legitimate system prompt would push callers to fold
+    # their instructions back into the guarded span — reintroducing the exact
+    # block this split exists to fix. This stands in for the eval judge's
+    # prompt at roughly its real length; the gateway suite does not import the
+    # eval service.
+    realistic = "You are grading one answer produced by a TV-catalogue assistant. " * 15
+    assert len(realistic) < SYSTEM_MAX_CHARS
+    GatewayRequest(service_id="evalsvc", feature_id="judge", prompt="hi", system=realistic)
 
 
 def test_request_rejects_unknown_field() -> None:

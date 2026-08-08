@@ -14,7 +14,7 @@ from agentpave_evalsvc.judge import (
     JUDGE_FEATURE,
     PASS_THRESHOLD,
     JudgeError,
-    build_judge_prompt,
+    build_judge_content,
     lint_prompt,
     parse_verdict,
     verdict_passes,
@@ -68,14 +68,14 @@ def test_judge_feature_is_still_refused_for_sensitive_data():
 def test_judge_prompt_carries_source_question_and_answer():
     """Groundedness is unanswerable without the source: a judge that cannot
     see it can only rate whether the answer sounds right."""
-    prompt = build_judge_prompt(_case(), "THE SOURCE DATA", "THE ANSWER")
+    prompt = build_judge_content(_case(), "THE SOURCE DATA", "THE ANSWER")
     assert "THE SOURCE DATA" in prompt
     assert "What network airs it?" in prompt
     assert "THE ANSWER" in prompt
 
 
 def test_judge_prompt_truncates_a_huge_source():
-    prompt = build_judge_prompt(_case(), "x" * 50_000, "answer")
+    prompt = build_judge_content(_case(), "x" * 50_000, "answer")
     assert len(prompt) < 20_000
 
 
