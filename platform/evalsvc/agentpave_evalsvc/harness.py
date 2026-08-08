@@ -114,7 +114,12 @@ def _extract(status: int, body: dict[str, Any]) -> tuple[str, float, str | None]
     if status != 200:
         return "", 0.0, f"gateway returned status {status}: {str(body)[:200]}"
     if body.get("refused") is True:
-        return "", 0.0, f"refused at {body.get('stage')}: {str(body.get('reason'))[:200]}"
+        # The filter list is carried through verbatim. A guardrail refusal
+        # whose message stops at "blocked" costs a redeploy to diagnose, which
+        # is what M03's first deployed run spent.
+        blocked_by = body.get("blocked_by") or ()
+        named = f" [{', '.join(str(f) for f in blocked_by)}]" if blocked_by else ""
+        return "", 0.0, f"refused at {body.get('stage')}: {str(body.get('reason'))[:200]}{named}"
     completion = body.get("completion")
     if not isinstance(completion, str) or not completion.strip():
         return "", 0.0, f"no completion in response: {str(body)[:200]}"

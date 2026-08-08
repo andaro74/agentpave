@@ -129,6 +129,37 @@ def test_a_refusal_on_a_golden_case_is_a_failure():
     assert "guardrail" in (result.error or "")
 
 
+def test_a_refusal_names_the_filter_that_fired():
+    """A failure report that stops at "blocked" costs a redeploy to diagnose.
+
+    M03's first deployed eval run died on a guardrail intervention whose only
+    description was `stage: guardrail`. A prompt-attack block and a PII block
+    have nothing in common except that word, so the message has to carry which
+    control fired for the failure to be actionable.
+    """
+
+    def call(**_):
+        return 200, {
+            "refused": True,
+            "stage": "guardrail",
+            "reason": "blocked",
+            "blocked_by": ["contentPolicy:PROMPT_ATTACK"],
+        }
+
+    error = run_case(_case(), call, "src").error or ""
+    assert "contentPolicy:PROMPT_ATTACK" in error
+
+
+def test_a_refusal_without_a_filter_list_still_reports_cleanly():
+    # An older gateway, or a block Bedrock returned no assessment for. The
+    # message degrades rather than growing an empty bracket nobody can read.
+    def call(**_):
+        return 200, {"refused": True, "stage": "guardrail", "reason": "blocked"}
+
+    error = run_case(_case(), call, "src").error or ""
+    assert error.endswith("blocked")
+
+
 def test_an_empty_completion_is_a_failure():
     def call(**_):
         return _completion("   ")

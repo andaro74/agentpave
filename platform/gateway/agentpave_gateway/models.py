@@ -62,6 +62,11 @@ class GatewayRefusal(_Strict):
     refused: Literal[True] = True
     stage: RefusalStage
     reason: str
+    # Which guardrail filters intervened, as `policy:type` labels — empty for
+    # every other stage. Filter *types* only: the matched text is never carried
+    # here, because a refusal payload travels into CI logs and echoing blocked
+    # content back out would undo the filter that stopped it.
+    blocked_by: tuple[str, ...] = ()
 
 
 class RoutingDecision(_Strict):

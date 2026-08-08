@@ -48,10 +48,15 @@ def test_completion_and_usage_are_returned(invoker: BedrockInvoker) -> None:
 def test_every_call_carries_the_guardrail(invoker: BedrockInvoker, client: FakeBedrock) -> None:
     # ARCHITECTURE.md §3: guardrails applied centrally. This is the assertion
     # that the gateway cannot reach a model without one.
+    #
+    # The trace is part of the config, not an optional extra: without it
+    # Bedrock returns no assessment, and every block in this platform becomes a
+    # boolean nobody can explain.
     invoker.invoke(model_id=HAIKU, prompt="hi", max_tokens=64)
     assert client.calls[0]["guardrailConfig"] == {
         "guardrailIdentifier": "gr-123",
         "guardrailVersion": "DRAFT",
+        "trace": "enabled",
     }
 
 
@@ -84,6 +89,175 @@ def test_guardrail_intervention_is_reported_as_blocked() -> None:
     assert result.blocked is True
     # Tokens are still counted — Bedrock bills for a call it stopped.
     assert result.input_tokens == 12
+
+
+# ── which filter fired ────────────────────────────────────────────────────
+#
+# M03's first deployed eval run was stopped by the guardrail and the response
+# said only "blocked". These tests cover the assessment walk that answers
+# "blocked by what?", and the rule that it must answer without quoting the
+# content that was blocked.
+
+
+def _blocked_response(assessment: dict[str, Any], *, side: str = "input") -> dict[str, Any]:
+    guardrail = (
+        {"inputAssessment": {"gr-123": assessment}}
+        if side == "input"
+        else {"outputAssessments": {"gr-123": [assessment]}}
+    )
+    return {
+        "output": {"message": {"content": [{"text": "Blocked."}]}},
+        "stopReason": "guardrail_intervened",
+        "usage": {"inputTokens": 12, "outputTokens": 0},
+        "trace": {"guardrail": guardrail},
+    }
+
+
+def _invoke(response: dict[str, Any]) -> Any:
+    invoker = BedrockInvoker(
+        FakeBedrock(response), guardrail_id="gr-123", guardrail_version="DRAFT"
+    )
+    return invoker.invoke(model_id=HAIKU, prompt="hi", max_tokens=64)
+
+
+def test_a_content_filter_block_names_the_filter() -> None:
+    result = _invoke(
+        _blocked_response(
+            {
+                "contentPolicy": {
+                    "filters": [
+                        {"type": "PROMPT_ATTACK", "confidence": "HIGH", "action": "BLOCKED"}
+                    ]
+                }
+            }
+        )
+    )
+    assert result.blocked_by == ("contentPolicy:PROMPT_ATTACK",)
+
+
+def test_a_filter_that_did_not_block_is_not_reported() -> None:
+    # Bedrock reports every filter it evaluated, most of them with action NONE.
+    # Listing those would bury the one that actually fired.
+    result = _invoke(
+        _blocked_response(
+            {
+                "contentPolicy": {
+                    "filters": [
+                        {"type": "HATE", "action": "NONE"},
+                        {"type": "PROMPT_ATTACK", "action": "BLOCKED"},
+                    ]
+                }
+            }
+        )
+    )
+    assert result.blocked_by == ("contentPolicy:PROMPT_ATTACK",)
+
+
+def test_an_output_side_block_is_reported_too() -> None:
+    result = _invoke(
+        _blocked_response(
+            {"contentPolicy": {"filters": [{"type": "VIOLENCE", "action": "BLOCKED"}]}},
+            side="output",
+        )
+    )
+    assert result.blocked_by == ("contentPolicy:VIOLENCE",)
+
+
+def test_one_filter_firing_on_many_entities_is_reported_once() -> None:
+    result = _invoke(
+        _blocked_response(
+            {
+                "sensitiveInformationPolicy": {
+                    "piiEntities": [
+                        {"type": "EMAIL", "match": "a@example.test", "action": "BLOCKED"},
+                        {"type": "EMAIL", "match": "b@example.test", "action": "BLOCKED"},
+                    ]
+                }
+            }
+        )
+    )
+    assert result.blocked_by == ("sensitiveInformationPolicy:EMAIL",)
+
+
+def test_the_matched_text_never_leaves_the_guardrail() -> None:
+    """The diagnostic must not undo the filter it is explaining.
+
+    `blocked_by` travels into a refusal payload, into `make eval` output, and
+    from there into CI logs. Bedrock hands us the matched text in every one of
+    these records; for a PII filter that text is the personal data the filter
+    exists to stop, and for a custom word it is the blocked word itself.
+    Reporting the entity *type* is what a human debugging a block needs, and it
+    is all they get.
+    """
+    result = _invoke(
+        _blocked_response(
+            {
+                "sensitiveInformationPolicy": {
+                    "piiEntities": [
+                        {"type": "EMAIL", "match": "leaked@example.test", "action": "BLOCKED"}
+                    ],
+                    "regexes": [{"name": "account-id", "match": "SEKRIT-42", "action": "BLOCKED"}],
+                },
+                "wordPolicy": {"customWords": [{"match": "forbidden-word", "action": "BLOCKED"}]},
+            }
+        )
+    )
+    rendered = " ".join(result.blocked_by)
+    assert "leaked@example.test" not in rendered
+    assert "SEKRIT-42" not in rendered
+    assert "forbidden-word" not in rendered
+    # Still useful: the caller learns which control fired, by name where the
+    # name is not the content.
+    assert set(result.blocked_by) == {
+        "sensitiveInformationPolicy:EMAIL",
+        "sensitiveInformationPolicy:account-id",
+        "wordPolicy:customWords",
+    }
+
+
+def test_a_block_without_a_trace_reports_nothing_rather_than_guessing() -> None:
+    # An absent assessment is not evidence of an absent filter. Empty is the
+    # honest answer; inventing a plausible filter name would be worse than
+    # saying nothing.
+    client = FakeBedrock(_converse_response("Blocked.", stop_reason="guardrail_intervened"))
+    invoker = BedrockInvoker(client, guardrail_id="gr-123", guardrail_version="DRAFT")
+
+    result = invoker.invoke(model_id=HAIKU, prompt="hi", max_tokens=64)
+    assert result.blocked is True
+    assert result.blocked_by == ()
+
+
+@pytest.mark.parametrize(
+    "trace",
+    [
+        {"guardrail": None},
+        {"guardrail": {"inputAssessment": None}},
+        {"guardrail": {"inputAssessment": {"gr-123": "not-a-dict"}}},
+        {"guardrail": {"outputAssessments": {"gr-123": [None]}}},
+        {"guardrail": {"inputAssessment": {"gr-123": {"contentPolicy": {"filters": [None]}}}}},
+        "not-a-dict",
+    ],
+)
+def test_a_shapeless_trace_does_not_turn_a_correct_block_into_a_crash(
+    trace: Any,
+) -> None:
+    # This code runs only after a request has already been blocked correctly.
+    # A KeyError here would surface as a 500 — the guardrail working, reported
+    # as the platform failing.
+    result = _invoke(
+        {
+            "output": {"message": {"content": [{"text": "Blocked."}]}},
+            "stopReason": "guardrail_intervened",
+            "usage": {"inputTokens": 1, "outputTokens": 0},
+            "trace": trace,
+        }
+    )
+    assert result.blocked is True
+    assert result.blocked_by == ()
+
+
+def test_nothing_is_reported_when_nothing_was_blocked(invoker: BedrockInvoker) -> None:
+    assert invoker.invoke(model_id=HAIKU, prompt="hi", max_tokens=64).blocked_by == ()
 
 
 @pytest.mark.parametrize(

@@ -27,17 +27,31 @@ class FakeTable:
 
 
 class FakeBedrock:
-    def __init__(self, *, stop_reason: str = "end_turn") -> None:
+    def __init__(self, *, stop_reason: str = "end_turn", blocked_by: str | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
         self._stop_reason = stop_reason
+        self._blocked_by = blocked_by
 
     def converse(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
-        return {
+        response: dict[str, Any] = {
             "output": {"message": {"content": [{"text": "Severance airs on Apple TV+."}]}},
             "stopReason": self._stop_reason,
             "usage": {"inputTokens": 120, "outputTokens": 80},
         }
+        if self._blocked_by:
+            response["trace"] = {
+                "guardrail": {
+                    "inputAssessment": {
+                        "gr-123": {
+                            "contentPolicy": {
+                                "filters": [{"type": self._blocked_by, "action": "BLOCKED"}]
+                            }
+                        }
+                    }
+                }
+            }
+        return response
 
 
 @pytest.fixture
@@ -143,6 +157,31 @@ def test_guardrail_intervention_becomes_a_refusal(table: FakeTable) -> None:
 
     assert isinstance(result, GatewayRefusal)
     assert result.stage == "guardrail"
+
+
+def test_a_refusal_tells_the_caller_which_filter_fired(table: FakeTable) -> None:
+    # M03's first deployed eval run was stopped by the guardrail and could not
+    # be diagnosed: `stage: guardrail` says a control fired, not which one, and
+    # the two have completely different fixes. A caller that cannot tell a
+    # prompt-attack block from a PII block cannot act on either.
+    bedrock = FakeBedrock(stop_reason="guardrail_intervened", blocked_by="PROMPT_ATTACK")
+    result = _gateway(bedrock, table).handle(_request(), request_id="req-1")
+
+    assert isinstance(result, GatewayRefusal)
+    assert result.blocked_by == ("contentPolicy:PROMPT_ATTACK",)
+
+
+def test_a_classification_refusal_names_no_filter(table: FakeTable, bedrock: FakeBedrock) -> None:
+    # Nothing was guarded, because nothing reached a model. An empty list here
+    # is the difference between "no filter fired" and "a filter fired and we
+    # did not record it".
+    result = _gateway(bedrock, table).handle(
+        _request(classification="sensitive"), request_id="req-1"
+    )
+
+    assert isinstance(result, GatewayRefusal)
+    assert result.stage == "classification"
+    assert result.blocked_by == ()
 
 
 def test_blocked_request_is_metered_with_its_real_cost(table: FakeTable) -> None:

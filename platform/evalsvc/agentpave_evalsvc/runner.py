@@ -98,7 +98,9 @@ def _live_scorer(call: Caller, dataset: Dataset):
             max_tokens=512,
         )
         if status != 200 or body.get("refused") is True or "completion" not in body:
-            raise RuntimeError(f"judge unavailable during calibration: {str(body)[:200]}")
+            blocked_by = body.get("blocked_by") or ()
+            named = f" — filters: {', '.join(str(f) for f in blocked_by)}" if blocked_by else ""
+            raise RuntimeError(f"judge unavailable during calibration: {str(body)[:300]}{named}")
         return parse_verdict(body["completion"])
 
     return score

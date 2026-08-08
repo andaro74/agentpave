@@ -79,7 +79,11 @@ class Gateway:
         )
 
         if result.blocked:
-            return GatewayRefusal(stage="guardrail", reason=_BLOCKED_REASON)
+            return GatewayRefusal(
+                stage="guardrail",
+                reason=_BLOCKED_REASON,
+                blocked_by=result.blocked_by,
+            )
 
         return GatewayCompletion(
             completion=result.completion,
