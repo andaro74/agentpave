@@ -1,0 +1,65 @@
+# AgentPave gateway guardrail — the authored source of truth.
+#
+# This file is not read at request time. `cdk synth` renders it into an
+# AWS::Bedrock::Guardrail and the gateway passes that guardrail's identifier on
+# every InvokeModel call, so enforcement is Bedrock's, not ours. Editing this
+# file changes the deployed guardrail on the next `make deploy-dev`; nothing
+# else needs to change.
+#
+# `make check` validates this file against the schema in guardrail.py, which
+# encodes the Bedrock constraints that would otherwise only surface as a
+# deploy-time API error.
+
+version: 1
+name: agentpave-gateway
+description: Central guardrail for every model call on the AgentPave platform.
+
+# What the caller sees when Bedrock blocks. Deliberately states that the block
+# came from the platform: an adversarial probe passes M03 on "guardrail
+# blocked", and that claim is only checkable if the refusal is attributable.
+blocked_input_message: >-
+  Blocked by the AgentPave gateway guardrail. This request was not sent to a model.
+blocked_output_message: >-
+  Blocked by the AgentPave gateway guardrail. The model response was withheld.
+
+content_filters:
+  # The injection defence the M03 adversarial suite is aimed at. Bedrock only
+  # supports PROMPT_ATTACK on the input side; output_strength must be NONE.
+  - type: PROMPT_ATTACK
+    input_strength: HIGH
+    output_strength: NONE
+
+  - type: HATE
+    input_strength: HIGH
+    output_strength: HIGH
+  - type: INSULTS
+    input_strength: MEDIUM
+    output_strength: MEDIUM
+  - type: SEXUAL
+    input_strength: HIGH
+    output_strength: HIGH
+  - type: VIOLENCE
+    input_strength: MEDIUM
+    output_strength: MEDIUM
+  - type: MISCONDUCT
+    input_strength: MEDIUM
+    output_strength: MEDIUM
+
+# A TV catalog concierge has no reason to handle contact or financial data.
+# Blocking rather than anonymising keeps the platform's story simple: this
+# class of PII does not enter the model path at all.
+#
+# NAME and ADDRESS are deliberately absent. A catalog agent legitimately
+# handles person names ("the show starring Adam Scott") and places ("set in
+# Albuquerque"); blocking them would break the sample use case while looking
+# like a stricter policy. A guardrail that blocks the product is not a
+# guardrail, it is an outage.
+pii_entities:
+  - type: EMAIL
+    action: BLOCK
+  - type: PHONE
+    action: BLOCK
+  - type: CREDIT_DEBIT_CARD_NUMBER
+    action: BLOCK
+  - type: US_SOCIAL_SECURITY_NUMBER
+    action: BLOCK
