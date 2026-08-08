@@ -11,10 +11,11 @@ generated from the other, so disagreement is real drift rather than a
 tautology.
 """
 
+import copy
 from typing import Any
 
 import pytest
-from agentpave_registry.registry import load_registry
+from agentpave_registry.registry import Registry, load_registry
 from jsonschema import Draft202012Validator
 
 SEVERANCE_ID = 44933
@@ -40,6 +41,17 @@ def _types_of(schema: dict[str, Any]) -> dict[str, Any]:
     real drift without failing on cosmetic differences that mean nothing.
     """
     return {name: prop.get("type") for name, prop in (schema.get("properties") or {}).items()}
+
+
+def contract_violations(tool_name: str, data: Any, *, registry: Registry = REGISTRY) -> list[str]:
+    """Every way `data` fails the tool's declared output schema.
+
+    The single place the contract is enforced. Both the conformance assertion
+    and the mutation test below call it, so the guard exercises the real check
+    rather than a re-implementation that could drift from it.
+    """
+    validator = Draft202012Validator(registry.tool(tool_name).output_schema)
+    return [error.message for error in sorted(validator.iter_errors(data), key=lambda e: e.path)]
 
 
 # ── the tool set ──────────────────────────────────────────────────────────
@@ -93,9 +105,43 @@ def test_response_validates_against_the_declared_output_schema(driver: Any, tool
     outcome = driver.call(tool_name, HAPPY_PATH[tool_name])
     assert outcome.ok, outcome.error
 
-    validator = Draft202012Validator(REGISTRY.tool(tool_name).output_schema)
-    errors = sorted(validator.iter_errors(outcome.data), key=lambda e: e.path)
-    assert not errors, f"{tool_name} response violates its contract: {[e.message for e in errors]}"
+    violations = contract_violations(tool_name, outcome.data)
+    assert not violations, f"{tool_name} response violates its contract: {violations}"
+
+
+# ── the suite's own teeth ─────────────────────────────────────────────────
+
+
+def _with_renamed_output_property(tool_name: str, old: str, new: str) -> Registry:
+    """A copy of the registry with one output property renamed.
+
+    Models the realistic drift: someone edits the contract and not the code.
+    """
+    payload = copy.deepcopy(REGISTRY.model_dump())
+    for tool in payload["tools"]:
+        if tool["name"] == tool_name:
+            properties = tool["output_schema"]["properties"]["shows"]["items"]["properties"]
+            properties[new] = properties.pop(old)
+    return Registry.model_validate(payload)
+
+
+def test_contract_check_catches_schema_drift(driver: Any) -> None:
+    """The permanent test of the tests.
+
+    A suite that has never been observed failing is indistinguishable from one
+    that cannot fail. The deliberately red commit in this repo's history proved
+    that once; this proves it on every run, so the check cannot quietly go
+    toothless after the story has been told.
+    """
+    outcome = driver.call("search_show", HAPPY_PATH["search_show"])
+    assert outcome.ok, outcome.error
+    assert not contract_violations("search_show", outcome.data)
+
+    drifted = _with_renamed_output_property("search_show", "network", "channel")
+    violations = contract_violations("search_show", outcome.data, registry=drifted)
+
+    assert violations, "the contract check accepted a response its schema should reject"
+    assert any("network" in message for message in violations)
 
 
 # ── error shapes ──────────────────────────────────────────────────────────
