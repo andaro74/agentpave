@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "tvmaze-catalog": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "agentpave_mcp_tvmaze"],
+      "env": {
+        "AGENTPAVE_AGENT_ID": "catalog-agent",
+        "AGENTPAVE_TVMAZE_MODE": "fixtures"
+      }
+    }
+  }
+}

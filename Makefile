@@ -41,27 +41,44 @@ synth: ## Synthesise CloudFormation from the CDK app — no AWS account needed
 diagrams: ## Render docs/diagrams/*.mermaid to SVG
 	$(call not_yet,diagrams,M07)
 
-# ── Lambda asset ─────────────────────────────────────────────────────────────
+# ── Lambda assets ────────────────────────────────────────────────────────────
 
-BUILD_DIR   := build/gateway
-GATEWAY_PKG := platform/gateway/agentpave_gateway
+GATEWAY_BUILD := build/gateway
+MCP_BUILD     := build/mcp-tvmaze
+
+# CDK's PythonFunction bundles with Docker at synth time, which would put a
+# Docker daemon on the critical path of `make check`. Assets are built here
+# instead, and `cdk synth` points at plain source when it isn't deploying
+# (ADR-007). boto3 is deliberately never vendored — the runtime provides it.
+#
+# $(1) build dir · $(2) source package · $(3) pip requirements
+define build_asset
+	rm -rf $(1)
+	mkdir -p $(1)
+	uv pip install --quiet --target $(1) \
+		--python-platform aarch64-manylinux2014 --python-version 3.12 \
+		--only-binary=:all: $(3)
+	cp -r $(2) $(1)/
+	@# Host-built .pyc files are the wrong platform and would ship as dead
+	@# weight; dropping them also keeps the asset hash stable across machines.
+	find $(1) -name '__pycache__' -type d -prune -exec rm -rf {} +
+	@echo "✅ asset built at $(1)"
+endef
 
 .PHONY: build-gateway
 build-gateway: ## Vendor the gateway's runtime deps into build/ — no Docker
-	@# CDK's PythonFunction bundles with Docker at synth time, which would put
-	@# a Docker daemon on the critical path of `make check`. Instead the asset
-	@# is built here and `cdk synth` points at plain source when it isn't.
-	@# boto3 is deliberately absent — the Lambda runtime provides it.
-	rm -rf $(BUILD_DIR)
-	mkdir -p $(BUILD_DIR)
-	uv pip install --quiet --target $(BUILD_DIR) \
-		--python-platform aarch64-manylinux2014 --python-version 3.12 \
-		--only-binary=:all: pydantic pyyaml
-	cp -r $(GATEWAY_PKG) $(BUILD_DIR)/
-	@# Host-built .pyc files are the wrong platform and would ship as dead
-	@# weight; dropping them also keeps the asset hash stable across machines.
-	find $(BUILD_DIR) -name '__pycache__' -type d -prune -exec rm -rf {} +
-	@echo "✅ gateway asset built at $(BUILD_DIR)"
+	$(call build_asset,$(GATEWAY_BUILD),platform/gateway/agentpave_gateway,pydantic pyyaml)
+
+.PHONY: build-mcp
+build-mcp: ## Vendor the MCP server's runtime deps into build/ — no Docker
+	@# The registry package ships alongside: the server evaluates Cedar
+	@# in-process, so tools.yaml and the policies travel with it.
+	$(call build_asset,$(MCP_BUILD),platform/mcp-tvmaze/agentpave_mcp_tvmaze,mcp mangum cedarpy pyyaml)
+	cp -r platform/registry/agentpave_registry $(MCP_BUILD)/
+	find $(MCP_BUILD) -name '__pycache__' -type d -prune -exec rm -rf {} +
+
+.PHONY: build
+build: build-gateway build-mcp ## Build every Lambda asset
 
 # ── Deployed gates (need AWS; cost real money) ───────────────────────────────
 
@@ -75,21 +92,34 @@ bootstrap: ## ⚠️ once per account+region — CDK toolkit stack
 	@$(WITH_ENV) cdk bootstrap
 
 .PHONY: deploy-dev
-deploy-dev: build-gateway ## ⚠️ creates real infrastructure
-	@$(WITH_ENV) AGENTPAVE_GATEWAY_ASSET=$(BUILD_DIR) \
-		cdk deploy --require-approval broadening
+deploy-dev: build ## ⚠️ creates real infrastructure
+	@$(WITH_ENV) AGENTPAVE_GATEWAY_ASSET=$(GATEWAY_BUILD) AGENTPAVE_MCP_ASSET=$(MCP_BUILD) \
+		cdk deploy --all --require-approval broadening
 
 .PHONY: destroy-dev
 destroy-dev: ## tear it all down — nothing should bill after this
-	@$(WITH_ENV) cdk destroy --force
+	@$(WITH_ENV) cdk destroy --all --force
 
 .PHONY: smoke-gateway
 smoke-gateway: ## M01 deployed gate: guarded, metered completion; must-block blocked
 	@$(WITH_ENV) uv run python -m agentpave_infra.smoke
 
 .PHONY: conformance
-conformance: ## M02 deployed gate: contract suite vs. deployed MCP tool
-	$(call not_yet,conformance,M02)
+conformance: ## M02 deployed gate: the same contract suite, vs. the deployed MCP tool
+	@# Setting AGENTPAVE_MCP_URL is what adds the deployed driver to the suite;
+	@# without it the very same tests run against fixtures only. That is the
+	@# false pass this target has to prevent: an undeployed stack resolves the
+	@# URL to empty, the suite runs green in-process, and nothing says the
+	@# deployed gate never ran. So the URL is resolved first and checked.
+	@$(WITH_ENV) url=$$(aws cloudformation describe-stacks \
+		--stack-name AgentPave-Mcp-$${AGENTPAVE_STAGE:-dev} \
+		--query 'Stacks[0].Outputs[?OutputKey==`McpUrl`].OutputValue' \
+		--output text 2>/dev/null); \
+	if [ -z "$$url" ] || [ "$$url" = "None" ]; then \
+		echo "✋ no deployed MCP URL — run 'make deploy-dev' first"; exit 1; \
+	fi; \
+	echo "conformance target: $$url"; \
+	AGENTPAVE_MCP_URL="$$url" uv run pytest platform/mcp-tvmaze/tests/test_mcp_contract.py -v
 
 .PHONY: eval
 eval: ## M03 deployed gate: golden-set scorecard (pave eval under the hood)
