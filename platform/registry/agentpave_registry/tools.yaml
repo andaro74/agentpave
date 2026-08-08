@@ -1,0 +1,121 @@
+# The tool registry — every tool the platform will serve, declared before it
+# can be served.
+#
+# `consequence` is the field that matters most. `read` is a claim that calling
+# the tool changes nothing, and the contract suite checks that claim by
+# recording the HTTP methods the tool issued: a `read` tool that sends anything
+# but GET turns the suite red. The class is a checked property, not a label.
+#
+# Schemas here are the contract. The MCP server must advertise exactly these —
+# drift in either direction fails the hermetic gate.
+
+version: 1
+
+tools:
+  - name: search_show
+    owner: platform-team
+    tool_version: 1.0.0
+    description: >-
+      Search the TV catalogue by show name. Returns the matching shows with the
+      network that airs them, their current status, and a short summary.
+    consequence: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          description: Show name or fragment to search for.
+    output_schema:
+      type: object
+      additionalProperties: false
+      required: [shows]
+      properties:
+        shows:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, status]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              network: { type: [string, "null"] }
+              status: { type: string }
+              genres: { type: array, items: { type: string } }
+              premiered: { type: [string, "null"] }
+              summary: { type: [string, "null"] }
+
+  - name: get_episodes
+    owner: platform-team
+    tool_version: 1.0.0
+    description: >-
+      List the episodes of a show, by the show id returned from search_show.
+      Use this to answer questions about seasons, episode names, and air dates.
+    consequence: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [show_id]
+      properties:
+        show_id:
+          type: integer
+          minimum: 1
+          description: TVMaze show id, as returned by search_show.
+    output_schema:
+      type: object
+      additionalProperties: false
+      required: [episodes]
+      properties:
+        episodes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, season, number]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              season: { type: integer }
+              number: { type: [integer, "null"] }
+              airdate: { type: [string, "null"] }
+              runtime: { type: [integer, "null"] }
+
+  - name: get_schedule
+    owner: platform-team
+    tool_version: 1.0.0
+    description: >-
+      The broadcast schedule for one country and date. Use this to answer
+      "what is on tonight" style questions.
+    consequence: read
+    input_schema:
+      type: object
+      additionalProperties: false
+      required: [date]
+      properties:
+        date:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          description: ISO-8601 date, e.g. 2026-08-07.
+        country:
+          type: string
+          pattern: "^[A-Z]{2}$"
+          description: ISO-3166 country code. Defaults to US.
+    output_schema:
+      type: object
+      additionalProperties: false
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [show_name, episode_name]
+            properties:
+              show_name: { type: string }
+              episode_name: { type: string }
+              network: { type: [string, "null"] }
+              airtime: { type: [string, "null"] }

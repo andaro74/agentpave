@@ -1,0 +1,21 @@
+[project]
+name = "agentpave-registry"
+version = "0.0.1"
+description = "AgentPave tool registry: contracts, consequence classes, Cedar policy"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    # The real Cedar engine, not a re-implementation. ARCHITECTURE §3 cuts
+    # Amazon Verified Permissions, not Cedar itself.
+    "cedarpy>=4.8",
+    # Used by the contract suite to check responses against declared schemas.
+    "jsonschema>=4.23",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agentpave_registry"]

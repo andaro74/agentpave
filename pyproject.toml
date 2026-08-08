@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "agentpave-gateway",
     "agentpave-infra",
+    "agentpave-registry",
 ]
 
 # The repo root is a virtual project: it wires the workspace together but is
@@ -19,11 +20,13 @@ package = false
 members = [
     "platform/gateway",
     "platform/infra",
+    "platform/registry",
 ]
 
 [tool.uv.sources]
 agentpave-gateway = { workspace = true }
 agentpave-infra = { workspace = true }
+agentpave-registry = { workspace = true }
 
 [dependency-groups]
 dev = [
