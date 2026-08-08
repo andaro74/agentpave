@@ -42,7 +42,7 @@ tools:
             properties:
               id: { type: integer }
               name: { type: string }
-              channel: { type: [string, "null"] }
+              network: { type: [string, "null"] }
               status: { type: string }
               genres: { type: array, items: { type: string } }
               premiered: { type: [string, "null"] }
