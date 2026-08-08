@@ -8,7 +8,7 @@ to assert on character by character (see tests/test_gateway_stack.py).
 """
 
 from agentpave_gateway.guardrail import load_policy
-from aws_cdk import Duration, RemovalPolicy, Stack
+from aws_cdk import CfnOutput, Duration, RemovalPolicy, Stack
 from aws_cdk import aws_bedrock as bedrock
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_iam as iam
@@ -161,3 +161,11 @@ class GatewayStack(Stack):
         self.function_url = self.gateway_function.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.AWS_IAM,
         )
+
+        # ── Outputs ───────────────────────────────────────────────────────
+        # The smoke gate discovers the deployment through these rather than
+        # taking hardcoded names on the command line, so `make smoke-gateway`
+        # tests whatever was last deployed instead of what someone remembered.
+        CfnOutput(self, "FunctionUrl", value=self.function_url.url)
+        CfnOutput(self, "MeteringTableName", value=self.metering_table.table_name)
+        CfnOutput(self, "GuardrailId", value=self.guardrail.attr_guardrail_id)
