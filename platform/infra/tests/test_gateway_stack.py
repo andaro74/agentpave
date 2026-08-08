@@ -166,6 +166,41 @@ def test_guardrail_filters_prompt_attack(template: Template) -> None:
     )
 
 
+def test_guardrail_carries_every_authored_pii_filter(template: Template) -> None:
+    """The substitute coverage ADR-011 promises, and the only coverage the PII
+    filters have.
+
+    Standing rule 3 forbids the PII-shaped strings a runtime probe would need,
+    so no gate in this project ever observes these filters firing.
+
+    Read what this does and does not prove. Both sides come from the same
+    YAML, so it is a **round-trip** check: it catches a render path that drops
+    or renames entities on their way to CloudFormation. It does *not* catch an
+    entity deleted from the authored policy — that moves both sides together
+    and stays green here. `test_committed_policy_blocks_contact_and_financial_pii`
+    in the gateway's own suite is what pins the required set, with the entity
+    types written out by hand.
+
+    Neither asserts the control *fires*. ADR-011 is explicit about that gap;
+    this test is not evidence it is closed.
+    """
+    policy = load_policy()
+    assert policy.pii_entities, "the authored policy declares no PII entities to assert on"
+    template.has_resource_properties(
+        "AWS::Bedrock::Guardrail",
+        {
+            "SensitiveInformationPolicyConfig": {
+                "PiiEntitiesConfig": Match.array_with(
+                    [
+                        Match.object_like({"Type": entity.type, "Action": entity.action})
+                        for entity in policy.pii_entities
+                    ]
+                )
+            }
+        },
+    )
+
+
 def test_guardrail_permission_is_scoped_to_this_guardrail(template: Template) -> None:
     # `bedrock:ApplyGuardrail` on `*` would let the gateway apply — or claim to
     # apply — a guardrail this stack does not own.
