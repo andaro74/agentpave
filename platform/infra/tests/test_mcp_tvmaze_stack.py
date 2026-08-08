@@ -11,7 +11,8 @@ from typing import Any
 
 import aws_cdk as cdk
 import pytest
-from agentpave_infra.stacks.mcp_tvmaze_stack import McpTvmazeStack
+from agentpave_infra.stacks.mcp_tvmaze_stack import MCP_PATH, McpTvmazeStack
+from agentpave_mcp_tvmaze.lambda_handler import STREAMABLE_HTTP_PATH
 from aws_cdk.assertions import Match, Template
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -98,6 +99,23 @@ def test_deployed_server_serves_fixtures_not_live_tvmaze(template: Template) -> 
         "AWS::Lambda::Function",
         {"Environment": {"Variables": Match.object_like({"AGENTPAVE_TVMAZE_MODE": "fixtures"})}},
     )
+
+
+def test_published_url_points_at_the_mcp_endpoint(template: Template) -> None:
+    # The first conformance run went to the bare function URL and got 404 on
+    # every request: the app serves MCP at /mcp, and the output published the
+    # root. An output that names the wrong endpoint is a broken contract with
+    # every consumer, so the path is asserted rather than eyeballed.
+    outputs = template.find_outputs("McpUrl")
+    assert outputs, "the stack must publish McpUrl"
+    joined = outputs["McpUrl"]["Value"]["Fn::Join"][1]
+    assert joined[-1] == MCP_PATH
+
+
+def test_published_path_matches_the_handler(template: Template) -> None:
+    # The stack and the handler each name the path; this is what keeps them
+    # from drifting apart without importing one into the other.
+    assert f"/{MCP_PATH}" == STREAMABLE_HTTP_PATH
 
 
 def test_log_group_has_bounded_retention(template: Template) -> None:

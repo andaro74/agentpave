@@ -13,6 +13,12 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from constructs import Construct
 
+# Where the ASGI app serves MCP, without the leading slash: the function URL
+# already ends in one. Kept in step with the handler's STREAMABLE_HTTP_PATH by
+# a test rather than by an import, so the deployed asset does not have to
+# depend on the infra package to stay honest.
+MCP_PATH = "mcp"
+
 
 class McpTvmazeStack(Stack):
     """Lambda + Function URL serving MCP over streamable HTTP."""
@@ -75,4 +81,7 @@ class McpTvmazeStack(Stack):
             auth_type=lambda_.FunctionUrlAuthType.AWS_IAM,
         )
 
-        CfnOutput(self, "McpUrl", value=self.function_url.url)
+        # The MCP endpoint, not the bare function URL. The ASGI app serves MCP
+        # at /mcp, so publishing the root would hand every consumer — including
+        # `make conformance` — a URL that 404s. `function_url.url` ends in "/".
+        CfnOutput(self, "McpUrl", value=f"{self.function_url.url}{MCP_PATH}")
