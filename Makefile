@@ -41,23 +41,51 @@ synth: ## Synthesise CloudFormation from the CDK app — no AWS account needed
 diagrams: ## Render docs/diagrams/*.mermaid to SVG
 	$(call not_yet,diagrams,M07)
 
+# ── Lambda asset ─────────────────────────────────────────────────────────────
+
+BUILD_DIR   := build/gateway
+GATEWAY_PKG := platform/gateway/agentpave_gateway
+
+.PHONY: build-gateway
+build-gateway: ## Vendor the gateway's runtime deps into build/ — no Docker
+	@# CDK's PythonFunction bundles with Docker at synth time, which would put
+	@# a Docker daemon on the critical path of `make check`. Instead the asset
+	@# is built here and `cdk synth` points at plain source when it isn't.
+	@# boto3 is deliberately absent — the Lambda runtime provides it.
+	rm -rf $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)
+	uv pip install --quiet --target $(BUILD_DIR) \
+		--python-platform aarch64-manylinux2014 --python-version 3.12 \
+		--only-binary=:all: pydantic pyyaml
+	cp -r $(GATEWAY_PKG) $(BUILD_DIR)/
+	@# Host-built .pyc files are the wrong platform and would ship as dead
+	@# weight; dropping them also keeps the asset hash stable across machines.
+	find $(BUILD_DIR) -name '__pycache__' -type d -prune -exec rm -rf {} +
+	@echo "✅ gateway asset built at $(BUILD_DIR)"
+
 # ── Deployed gates (need AWS; cost real money) ───────────────────────────────
+
+# .env is sourced per-target rather than included globally, so `make check`
+# genuinely cannot read it (the note at the top of .env stays true).
+WITH_ENV := test -f .env || { echo "✋ no .env — run 'make install' and edit it"; exit 1; }; \
+            set -a && . ./.env && set +a &&
 
 .PHONY: bootstrap
 bootstrap: ## ⚠️ once per account+region — CDK toolkit stack
-	$(call not_yet,bootstrap,M01)
+	@$(WITH_ENV) cdk bootstrap
 
 .PHONY: deploy-dev
-deploy-dev: ## ⚠️ creates real infrastructure
-	$(call not_yet,deploy-dev,M01)
+deploy-dev: build-gateway ## ⚠️ creates real infrastructure
+	@$(WITH_ENV) AGENTPAVE_GATEWAY_ASSET=$(BUILD_DIR) \
+		cdk deploy --require-approval broadening
 
 .PHONY: destroy-dev
 destroy-dev: ## tear it all down — nothing should bill after this
-	$(call not_yet,destroy-dev,M01)
+	@$(WITH_ENV) cdk destroy --force
 
 .PHONY: smoke-gateway
-smoke-gateway: ## M01 deployed gate: guarded, metered completion via curl
-	$(call not_yet,smoke-gateway,M01)
+smoke-gateway: ## M01 deployed gate: guarded, metered completion; must-block blocked
+	@$(WITH_ENV) uv run python -m agentpave_infra.smoke
 
 .PHONY: conformance
 conformance: ## M02 deployed gate: contract suite vs. deployed MCP tool

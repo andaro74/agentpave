@@ -10,6 +10,9 @@ __pycache__/
 # env & secrets
 .env
 
+# build artefacts
+build/
+
 # cdk / node
 cdk.out/
 node_modules/
