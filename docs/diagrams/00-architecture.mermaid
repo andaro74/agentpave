@@ -1,0 +1,12 @@
+%% Rendered to SVG at M07 via `make diagrams`. Placeholder tracks ARCHITECTURE.md §3.
+flowchart TB
+    DEV[dev laptop · pave CLI] --> REPO[service repo]
+    REPO --> CI[GitHub Actions gate\nL0 unit · L1 contract · L2 evals · L5 adversarial\nfail-closed · score-diff PR comment]
+    CI --> AGENT[Catalog Agent · Lambda]
+    AGENT --> GW[LLM Gateway · Lambda\nGuardrails · routing · metering]
+    GW --> BR[Amazon Bedrock\nHaiku serve · Sonnet judge]
+    AGENT --> MCP[MCP tvmaze-catalog · Lambda\ntools.yaml · Cedar in-process]
+    CI --> EVAL[Eval Service\ngolden set · judge · adversarial · baselines]
+    EVAL --> BR
+    AGENT -.OTEL.-> CW[CloudWatch\ndashboard-as-code · defect leakage]
+    GW -.OTEL.-> CW

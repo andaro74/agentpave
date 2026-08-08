@@ -1,0 +1,23 @@
+[project]
+name = "agentpave"
+version = "0.0.1"
+description = "Miniature agentic AI developer platform on AWS with QA baked in"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "pytest>=8.3",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["platform", "pave", "templates", "services", "tests"]
+addopts = "-ra"
