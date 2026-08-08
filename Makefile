@@ -123,11 +123,16 @@ conformance: ## M02 deployed gate: the same contract suite, vs. the deployed MCP
 
 .PHONY: eval
 eval: ## M03 deployed gate: golden-set scorecard (pave eval under the hood)
-	$(call not_yet,eval,M03)
+	@# `pave eval` is the one implementation; this target is a thin wrapper, so
+	@# CI and a developer's laptop cannot drift onto different code paths.
+	@# --diff and --save-baseline together mean the run is compared against the
+	@# previous baseline and then becomes the next one, which is what makes the
+	@# comparison meaningful on the second run rather than the third.
+	@$(WITH_ENV) uv run pave eval --diff --save-baseline
 
 .PHONY: eval-adversarial
 eval-adversarial: ## M03 deployed gate: passes on "blocked or denied+logged", never "the model resisted"
-	$(call not_yet,eval-adversarial,M03)
+	@$(WITH_ENV) uv run pave eval --adversarial-only
 
 .PHONY: walkthrough
 walkthrough: ## M04 deployed gate: Act 1 end to end
