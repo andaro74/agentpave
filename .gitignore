@@ -21,3 +21,5 @@ cdk.context.json
 # recordings & scratch
 *.local.*
 scratch/
+
+.claude/settings.local.json
