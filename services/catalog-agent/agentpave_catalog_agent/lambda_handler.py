@@ -1,0 +1,62 @@
+"""Lambda entrypoint for catalog-agent.
+
+The app is built per invocation. A module-level object that a warm container
+reuses is how M02 shipped an endpoint that worked when probed once and failed
+on every request after it (ADR-009) — so anything stateful is constructed
+inside the handler, and the hermetic test invokes it twice to prove it.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from .agent import answer
+from .gateway import GatewayError, GatewayRefusal
+from .tools import ToolError
+
+
+def _response(status: int, body: Any) -> dict[str, Any]:
+    return {
+        "statusCode": status,
+        "headers": {"content-type": "application/json"},
+        "body": json.dumps(body),
+    }
+
+
+def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
+    """Function URL entrypoint: {"question": "...", "feature_id": "..."}."""
+    try:
+        payload = json.loads(event.get("body") or "{}")
+    except json.JSONDecodeError:
+        return _response(400, {"error": "body is not valid JSON"})
+
+    question = payload.get("question")
+    if not isinstance(question, str) or not question.strip():
+        return _response(400, {"error": "question is required"})
+
+    feature_id = payload.get("feature_id", "summarize")
+
+    try:
+        result = answer(question, feature_id=feature_id)
+    except GatewayRefusal as refusal:
+        # A refusal is the platform working, not an error. 403 keeps it
+        # distinguishable from a fault by anything reading status codes.
+        return _response(
+            403,
+            {
+                "refused": True,
+                "stage": refusal.stage,
+                "reason": refusal.reason,
+                "blocked_by": list(refusal.blocked_by),
+            },
+        )
+    except ValueError as exc:
+        return _response(400, {"error": str(exc)})
+    except (ToolError, GatewayError) as exc:
+        return _response(502, {"error": str(exc)})
+
+    return _response(
+        200,
+        {"answer": result.text, "feature_id": result.feature_id, "tool": result.tool},
+    )

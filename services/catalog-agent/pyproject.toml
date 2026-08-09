@@ -1,0 +1,48 @@
+[project]
+name = "catalog-agent"
+version = "0.0.1"
+description = "AgentPave service catalog-agent, scaffolded from the agent-tools template"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.35",
+    "requests>=2.32",
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+]
+
+# There is deliberately no bedrock client here. This service reaches models
+# only through the gateway (ARCHITECTURE.md invariant 1), and its IAM role
+# holds zero `bedrock:*` — asserted in `cdk synth`, not trusted.
+
+[project.optional-dependencies]
+# OTEL is optional so the service starts without it; telemetry.py degrades to
+# a no-op rather than refusing to run.
+telemetry = [
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
+]
+
+# The package is `agentpave_catalog_agent`, never `catalog-agent`. A directory whose name
+# matches a module shadows it as a namespace package the moment the repo root
+# is on sys.path — which it is under pytest (ADR-004).
+[tool.setuptools.packages.find]
+include = ["agentpave_catalog_agent*"]
+
+# The scaffolded service lints by the platform's rules, not ruff's defaults.
+# Without this it inherits an 88-column default while the platform uses 100,
+# so a service that is clean in its own directory is dirty in the monorepo —
+# and the render gate, which lints the output, disagrees with `make check`.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

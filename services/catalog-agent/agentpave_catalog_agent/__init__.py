@@ -1,0 +1,11 @@
+"""catalog-agent — scaffolded by `pave new --template agent-tools`.
+
+Governed at birth: it reaches models only through the gateway, tools only
+through MCP, and ships its own eval dataset and quality gate. Nothing here
+needs editing to make those true; they are true because of how it was
+rendered.
+"""
+
+__all__ = ["__version__"]
+
+__version__ = "0.0.1"
