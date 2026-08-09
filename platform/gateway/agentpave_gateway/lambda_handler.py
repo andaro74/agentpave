@@ -22,8 +22,13 @@ from .metering import MeteringWriter
 from .models import GatewayCompletion, GatewayRefusal, GatewayRequest
 from .pricing import load_price_table
 from .routing import RoutingTable
+from .screening import find_encoded_text
 
 _BLOCKED_REASON = "blocked by the AgentPave gateway guardrail"
+_ENCODED_REASON = (
+    "encoded text is not accepted on this platform — a TV catalogue has no use "
+    "for it, and Bedrock's prompt-attack filter does not decode"
+)
 
 
 class Gateway:
@@ -57,6 +62,25 @@ class Gateway:
                 model_id=None,
             )
             return GatewayRefusal(stage="classification", reason=decision.reason)
+
+        # Screened after routing so the ledger records which model the request
+        # would have reached, and before invoking so it never reaches it.
+        # Both spans are checked: `system` is code-resident by contract
+        # (ADR-013), and a contract is not a reason to skip a free check.
+        encoded = find_encoded_text(request.prompt) + find_encoded_text(request.system or "")
+        if encoded:
+            self._metering.write(
+                request_id=request_id,
+                service_id=request.service_id,
+                feature_id=request.feature_id,
+                classification=request.classification,
+                outcome="refused",
+                model_id=None,
+            )
+            return GatewayRefusal(
+                stage="screening",
+                reason=f"{_ENCODED_REASON}: {', '.join(encoded)}",
+            )
 
         result = self._invoker.invoke(
             model_id=decision.model_id,

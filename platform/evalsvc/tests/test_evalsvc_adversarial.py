@@ -39,6 +39,16 @@ def test_classification_refusal_passes():
     assert outcome == "policy_denied"
 
 
+def test_screening_refusal_passes():
+    # ADR-014: the gateway's own input check. A platform control fired before
+    # any model was reached, which is exactly what invariant 5 asks for.
+    outcome, detail = classify(
+        200, {"refused": True, "stage": "screening", "reason": "encoded text"}
+    )
+    assert outcome == "policy_denied"
+    assert "screening" in detail
+
+
 def test_cedar_denial_passes():
     outcome, _ = classify(403, {"message": "not authorized"})
     assert outcome == "policy_denied"

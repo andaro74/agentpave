@@ -17,7 +17,12 @@ DataClassification = Literal["public", "internal", "sensitive"]
 # Where in the pipeline a request died. Kept distinct so the M05 dashboard can
 # count classification refusals and guardrail interventions separately — they
 # mean different things about the caller.
-RefusalStage = Literal["classification", "routing", "guardrail"]
+# `screening` is the gateway's own input check, distinct from Bedrock's
+# guardrail because it is ours and runs before any model is touched. Kept as a
+# separate stage so M05 can count the two independently: a rise in screening
+# denials means someone is probing the platform, and folding it into
+# `guardrail` would hide that behind Bedrock's numbers.
+RefusalStage = Literal["classification", "routing", "screening", "guardrail"]
 
 # How long a caller's system instructions may be. Sized to fit a real system
 # prompt with room to spare — the eval judge's is about a thousand characters —
