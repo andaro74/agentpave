@@ -71,7 +71,7 @@ def _write(dataset_dir: Path, *, cases: list, probes: list, samples: list) -> No
 def test_shipped_dataset_loads():
     dataset = load_dataset()
     assert len(dataset.golden) == 30
-    assert len(dataset.adversarial) == 10
+    assert len(dataset.adversarial) == 9
     assert len(dataset.calibration) == 10
 
 

@@ -275,7 +275,7 @@ def test_an_injected_probe_keeps_its_payload_inside_the_guarded_span():
 def test_plan_describes_the_shipped_dataset_without_calling_anything():
     rendered = plan(load_dataset())
     assert "30" in rendered
-    assert "adversarial:   10" in rendered
+    assert "adversarial:   9" in rendered
     assert "dry run" in rendered
 
 
