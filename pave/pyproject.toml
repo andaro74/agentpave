@@ -5,6 +5,12 @@ description = "The AgentPave platform CLI: new / eval / shadow-eval"
 requires-python = ">=3.12"
 dependencies = [
     "agentpave-evalsvc",
+    # The scaffolder renders Python and YAML that themselves contain braces,
+    # so `str.format`-style substitution is not viable. StrictUndefined is the
+    # reason for a real engine rather than regex replacement: a template
+    # referencing an unsupplied variable must fail the render, not emit an
+    # empty string and scaffold a service with a blank package name.
+    "jinja2>=3.1",
 ]
 
 # The command is `pave`; the module is `agentpave_pave`. They differ on

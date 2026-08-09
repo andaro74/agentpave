@@ -10,6 +10,7 @@ dependencies = [
     "agentpave-mcp-tvmaze",
     "agentpave-evalsvc",
     "agentpave-pave",
+    "catalog-agent",
 ]
 
 # The repo root is a virtual project: it wires the workspace together but is
@@ -18,7 +19,10 @@ dependencies = [
 package = false
 
 # Components are listed explicitly, not globbed — a member arrives when its
-# milestone does (registry + mcp-tvmaze in M02, evalsvc + pave in M03).
+# milestone does (registry + mcp-tvmaze in M02, evalsvc + pave in M03,
+# the scaffolded sample service in M04 — it is a member so `make check` runs
+# the tests it was rendered with, which is the only way the golden path is
+# graded rather than assumed).
 [tool.uv.workspace]
 members = [
     "platform/gateway",
@@ -27,6 +31,7 @@ members = [
     "platform/mcp-tvmaze",
     "platform/evalsvc",
     "pave",
+    "services/catalog-agent",
 ]
 
 [tool.uv.sources]
@@ -36,6 +41,7 @@ agentpave-registry = { workspace = true }
 agentpave-mcp-tvmaze = { workspace = true }
 agentpave-evalsvc = { workspace = true }
 agentpave-pave = { workspace = true }
+catalog-agent = { workspace = true }
 
 [dependency-groups]
 dev = [

@@ -19,16 +19,25 @@ import argparse
 import os
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from agentpave_evalsvc.dataset import DatasetError, load_dataset
 from agentpave_evalsvc.harness import plan
 
+from .scaffold import CLASSIFICATIONS, ScaffoldError, render, validate
+
 # Which milestone owns each verb, for the not-yet message. Kept as data so the
 # message and the roadmap cannot disagree quietly.
 NOT_YET = {
-    "new": "M04",
     "shadow-eval": "M06",
 }
+
+# The templates ship inside the repo, not inside the installed package: the
+# scaffolder is run from a clone, and a template the operator cannot read and
+# diff is a template nobody reviews.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TEMPLATE_ROOT = REPO_ROOT / "templates"
+SERVICES_ROOT = REPO_ROOT / "services"
 
 
 def _not_yet(verb: str) -> int:
@@ -66,10 +75,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="run only the adversarial mini-suite",
     )
 
-    new = sub.add_parser("new", help=f"scaffold a service (arrives in {NOT_YET['new']})")
-    new.add_argument("name")
+    new = sub.add_parser("new", help="scaffold a governed service from a template")
+    new.add_argument("name", help="kebab-case; becomes the directory, package and stack name")
     new.add_argument("--template", default="agent-tools")
-    new.add_argument("--classification", default="internal")
+    new.add_argument("--classification", default="internal", choices=CLASSIFICATIONS)
+    new.add_argument(
+        "--into",
+        default=None,
+        help="output directory (default: services/); used by the render gate",
+    )
 
     sub.add_parser(
         "shadow-eval",
@@ -103,6 +117,29 @@ def _run_eval(args: argparse.Namespace) -> int:
     )
 
 
+def _run_new(args: argparse.Namespace) -> int:
+    try:
+        spec = validate(args.name, args.classification)
+        written = render(
+            spec,
+            template_root=TEMPLATE_ROOT / args.template,
+            output_root=Path(args.into) if args.into else SERVICES_ROOT,
+        )
+    except ScaffoldError as exc:
+        print(f"pave new: {exc}", file=sys.stderr)
+        return 1
+
+    destination = (Path(args.into) if args.into else SERVICES_ROOT) / spec.name
+    print(f"scaffolded {spec.name} ({args.template}, {spec.classification}) → {destination}")
+    for path in written:
+        print(f"  {path}")
+    print(
+        f"\n{len(written)} files. It reaches models only through the gateway and "
+        "tools only through MCP; both are asserted at synth, not trusted."
+    )
+    return 0
+
+
 def _force_utf8_output() -> None:
     """Make stdout/stderr UTF-8 regardless of the console's code page.
 
@@ -130,6 +167,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _not_yet(args.verb)
     if args.verb == "eval":
         return _run_eval(args)
+    if args.verb == "new":
+        return _run_new(args)
 
     # Unreachable while argparse validates the verb, but an unhandled verb
     # must not exit 0 — a CLI that silently succeeds at nothing is the failure

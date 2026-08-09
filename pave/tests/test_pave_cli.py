@@ -21,10 +21,23 @@ def test_dry_run_plans_without_touching_aws(capsys):
     assert "golden cases:  30" in out
 
 
-def test_pave_new_fails_loudly(capsys):
-    code = main(["new", "catalog-agent", "--template", "agent-tools"])
+def test_pave_new_is_no_longer_a_stub(tmp_path, capsys):
+    """M04 implemented it, and this test used to assert the opposite.
+
+    The reversal is the point. `NOT_YET` is data, so a verb graduating has to
+    be a visible edit in both places rather than a message nobody re-read.
+    """
+    code = main(["new", "catalog-agent", "--into", str(tmp_path)])
+    assert code == 0
+    assert "arrives in" not in capsys.readouterr().err
+    assert (tmp_path / "catalog-agent" / "agentpave_catalog_agent" / "agent.py").exists()
+
+
+def test_pave_new_refuses_a_bad_name_without_writing(tmp_path, capsys):
+    code = main(["new", "Catalog_Agent", "--into", str(tmp_path)])
     assert code == 1
-    assert "arrives in M04" in capsys.readouterr().err
+    assert "kebab-case" in capsys.readouterr().err
+    assert not list(tmp_path.iterdir()), "a rejected name left files behind"
 
 
 def test_pave_shadow_eval_fails_loudly(capsys):
@@ -95,15 +108,15 @@ def test_no_verb_is_rejected():
 def test_not_yet_milestones_match_the_roadmap():
     """The message and the roadmap must not drift apart.
 
-    `pave new` is M04's scaffolder; `pave shadow-eval` is M06's canary
-    stand-in. If either moves, this test is the thing that notices.
+    `pave shadow-eval` is M06's canary stand-in. `pave new` graduated in M04
+    and must no longer be advertised as pending — a CLI that says a verb is
+    missing while implementing it is the not-yet rule failing in reverse.
     """
     from pathlib import Path
 
     roadmap = (Path(__file__).resolve().parents[2] / "docs" / "ROADMAP.md").read_text(
         encoding="utf-8"
     )
-    assert "## M04" in roadmap
-    assert "pave new" in roadmap
+    assert "## M06" in roadmap
     assert "pave shadow-eval" in roadmap
-    assert NOT_YET == {"new": "M04", "shadow-eval": "M06"}
+    assert NOT_YET == {"shadow-eval": "M06"}

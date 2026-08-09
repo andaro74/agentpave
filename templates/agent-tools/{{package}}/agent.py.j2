@@ -1,0 +1,88 @@
+"""The agent loop for {{ name }}.
+
+Deliberately thin, and deliberately not a framework (ADR-018). One tool, one
+turn, no memory: fetch grounding data through MCP, hand it to the model as
+untrusted content, return the answer.
+
+Two properties this file exists to hold:
+
+* **No in-process state survives a request.** Nothing is cached between
+  invocations, so a warm Lambda container behaves exactly like a cold one.
+  That is an ADR-003 migration-checklist item — AgentCore Runtime makes no
+  promise about container reuse — and it is also how M02's warm-container
+  failure is prevented from recurring in a scaffolded service.
+* **Tool output is untrusted.** It reaches the model in `prompt`, never in
+  `system`. See `gateway.py`; this is the one mistake in this template that
+  fails silently.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from . import telemetry
+from .gateway import complete
+from .tools import ToolError, call_tool
+
+# Instructions live here, in code, and never vary with input — which is the
+# only thing that makes them safe to send outside the guarded span.
+SYSTEM_PROMPT = (
+    "You are a TV catalogue assistant. Answer using only the CATALOGUE DATA "
+    "the user provides. If the data does not contain the answer, say so "
+    "plainly rather than supplying it from memory.\n\n"
+    "Answer directly. Do not open with a preamble restating the question or "
+    "the source, do not use markdown headings, bold, or bullet formatting, "
+    "and do not add closing offers of further help.\n"
+    "Write dates in ISO form (YYYY-MM-DD), exactly as they appear in the data."
+)
+
+# Which gateway feature each capability routes on. The gateway's routing table
+# defaults *open* — a feature it has never heard of quietly gets the fast model
+# — so a capability that needs the capable tier must be listed in the
+# gateway's `CAPABLE_FEATURES` as well as here. Nothing in a passing run
+# reveals a silent downgrade (M03: the judge was that feature).
+FEATURES = ("airing", "summarize", "running", "enrichment")
+
+
+@dataclass(frozen=True)
+class Answer:
+    """What one turn produced."""
+
+    text: str
+    feature_id: str
+    tool: str
+
+
+def _grounding(question: str) -> tuple[str, str]:
+    """Fetch the data this question should be answered from.
+
+    Returns `(tool_name, payload)`. At one tool this is a straight call; the
+    shape is a tuple so that adding a second tool is a change here and nowhere
+    else.
+    """
+    return "search_show", call_tool("search_show", {"query": question})
+
+
+def answer(question: str, *, feature_id: str = "summarize") -> Answer:
+    """Answer one question. No state survives this call."""
+    if feature_id not in FEATURES:
+        raise ValueError(f"unknown feature {feature_id!r}; expected one of {', '.join(FEATURES)}")
+
+    with telemetry.agent_span(feature_id=feature_id) as span:
+        try:
+            tool_name, payload = _grounding(question)
+        except ToolError as exc:
+            # A tool that failed is not grounding the model in anything. The
+            # alternative — answering anyway — is the hallucination this
+            # platform exists to make visible.
+            span.record_failure(str(exc))
+            raise
+
+        text = complete(
+            feature_id=feature_id,
+            # Tool output and the user's question, both untrusted, both guarded.
+            prompt=f"CATALOGUE DATA:\n{payload}\n\nQUESTION: {question}\n",
+            system=SYSTEM_PROMPT,
+        )
+        span.record_answer(text)
+        return Answer(text=text, feature_id=feature_id, tool=tool_name)
