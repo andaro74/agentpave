@@ -221,6 +221,12 @@ class CalibrationReport(_Strict):
     agreements: int = Field(ge=0)
     # Where judge and human parted, as (case_id, judge_pass, human_pass).
     disagreements: tuple[tuple[str, bool, bool], ...] = ()
+    # Samples where the judge's reply could not be parsed into a verdict at
+    # all. Counted as non-agreement — a judge that cannot produce a verdict has
+    # not agreed with anyone — but listed separately, because "the judge
+    # disagreed" and "the judge returned something unreadable" call for
+    # different responses from whoever reads this.
+    unparseable: tuple[tuple[str, str], ...] = ()
 
     @property
     def agreement_rate(self) -> float:

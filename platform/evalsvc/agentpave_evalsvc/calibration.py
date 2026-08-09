@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from .judge import verdict_passes
+from .judge import JudgeError, verdict_passes
 from .models import CalibrationReport, CalibrationSample, JudgeVerdict
 
 # 8 of 10. Below this the judge disagrees with a person often enough that a
@@ -40,9 +40,26 @@ def calibrate(
     """
     agreements = 0
     disagreements: list[tuple[str, bool, bool]] = []
+    unparseable: list[tuple[str, str]] = []
 
     for sample in samples:
-        judge_pass = verdict_passes(score(sample))
+        # A judge that returns something unreadable has not agreed with the
+        # human, but it has also not disagreed — and it must not abort the
+        # calibration. This raised an uncaught traceback out of `make eval`
+        # until a deliberately starved source made the judge drop an axis from
+        # its own reply; the run died mid-calibration having graded nothing,
+        # and the operator got a stack trace instead of a report.
+        #
+        # Counting it as non-agreement keeps the gate closed: enough of these
+        # and the run falls below the floor and refuses, which is the right
+        # outcome for a judge producing garbage. Recording it separately keeps
+        # the report honest about which kind of failure happened.
+        try:
+            judge_pass = verdict_passes(score(sample))
+        except JudgeError as exc:
+            unparseable.append((sample.case_id, str(exc).splitlines()[0]))
+            continue
+
         if judge_pass == sample.human_pass:
             agreements += 1
         else:
@@ -52,6 +69,7 @@ def calibrate(
         samples=len(samples),
         agreements=agreements,
         disagreements=tuple(disagreements),
+        unparseable=tuple(unparseable),
     )
 
 
@@ -61,6 +79,8 @@ def render(report: CalibrationReport, minimum: float = MIN_AGREEMENT) -> str:
         f"judge calibration: {report.agreements}/{report.samples} "
         f"({report.agreement_rate:.0%} agreement, floor {minimum:.0%})"
     ]
+    for case_id, detail in report.unparseable:
+        lines.append(f"  unreadable verdict on {case_id}: {detail}")
     for case_id, judge_pass, human_pass in report.disagreements:
         lines.append(
             f"  disagreed on {case_id}: "

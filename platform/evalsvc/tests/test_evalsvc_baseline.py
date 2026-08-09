@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from agentpave_evalsvc.baseline import diff, render
 from agentpave_evalsvc.calibration import calibrate, meets_floor
+from agentpave_evalsvc.calibration import render as render_calibration
+from agentpave_evalsvc.judge import JudgeError
 from agentpave_evalsvc.models import (
     Baseline,
     CalibrationSample,
@@ -147,6 +149,50 @@ def test_a_judge_below_the_floor_is_not_fit_to_grade():
     samples = tuple(_sample(f"c{i}", True) for i in range(10))
     report = calibrate(samples, lambda s: _verdict(s.case_id in ("c0", "c1", "c2", "c3", "c4")))
     assert report.agreement_rate == 0.5
+    assert not meets_floor(report)
+
+
+def test_an_unreadable_verdict_does_not_abort_calibration():
+    """Found by deliberately starving the source during the M03 teeth check.
+
+    The judge's own reply degraded — it dropped the `tone` axis — and the
+    `JudgeError` escaped `calibrate`, killing `make eval` with a traceback
+    before a single golden case was graded. The operator got a stack trace
+    instead of a report.
+    """
+    samples = (
+        CalibrationSample(case_id="a", answer="x", human_pass=True, note="n"),
+        CalibrationSample(case_id="b", answer="y", human_pass=True, note="n"),
+    )
+
+    def score(sample):
+        if sample.case_id == "a":
+            raise JudgeError("judge reply does not match the verdict schema:\nmissing tone")
+        return JudgeVerdict(groundedness=5, completeness=5, tone=5, rationale="fine")
+
+    report = calibrate(samples, score)
+
+    assert report.samples == 2
+    assert report.agreements == 1
+    assert [case_id for case_id, _ in report.unparseable] == ["a"]
+    # Counted as non-agreement, not skipped: a judge that cannot produce a
+    # verdict has not agreed with anyone, and skipping would raise the rate.
+    assert report.agreement_rate == 0.5
+    assert "unreadable verdict on a" in render_calibration(report)
+
+
+def test_enough_unreadable_verdicts_close_the_gate():
+    # The fail-closed half. Garbage from the judge must sink the run rather
+    # than shrink the denominator until the survivors look like agreement.
+    samples = tuple(
+        CalibrationSample(case_id=f"c{i}", answer="x", human_pass=True, note="n") for i in range(5)
+    )
+
+    def score(sample):
+        raise JudgeError("unreadable")
+
+    report = calibrate(samples, score)
+    assert report.agreement_rate == 0.0
     assert not meets_floor(report)
 
 
