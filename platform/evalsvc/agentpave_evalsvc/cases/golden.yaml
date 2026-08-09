@@ -121,7 +121,12 @@ cases:
   - case_id: summarize-episode-one
     capability: summarize
     grading: judged
-    prompt: Summarize the first episode of Severance in one sentence.
+    # The question now asks for the title the expectation always demanded. It
+    # did not before, and the case passed only because the model volunteered
+    # the title while padding its answer; tightening the tone instruction made
+    # it terser and the expectation failed. An assertion the question does not
+    # ask for is a coin toss, not a test.
+    prompt: Summarize the first episode of Severance in one sentence, naming the episode.
     fixture: shows_44933_episodes.json
     budget: { latency_ms: 20000, cost_usd: 0.02 }
     must_contain: ["Good News About Hell"]

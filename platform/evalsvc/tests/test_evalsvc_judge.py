@@ -97,16 +97,31 @@ def test_the_judge_grades_against_the_whole_source_the_model_answered_from():
 
 
 def test_the_judge_and_the_serving_turn_receive_the_same_source():
-    # Pins the relationship rather than either side's length, so a future cap
-    # has to be applied to both or fail here.
-    from agentpave_evalsvc.harness import build_case_content
+    """The cap lives upstream of both, so neither builder may trim.
 
-    source = "SOURCE-" + ("y" * 30_000) + "-END"
+    This is the shape of the original defect: `build_judge_content` capped and
+    `build_case_content` did not, so the judge graded a prefix of what the
+    model answered from. Pinning the *relationship* rather than either side's
+    length means a future cap has to be applied once, above both, or fail here.
+    """
+    from agentpave_evalsvc.harness import build_case_content, capped_source
+
+    source = capped_source("SOURCE-" + ("y" * 300_000) + "-END")
     served = build_case_content(_case(), source)
     judged = build_judge_content(_case(), source, "answer")
 
     assert source in served
     assert source in judged
+
+
+def test_the_cap_is_applied_once_and_upstream():
+    from agentpave_evalsvc.harness import SOURCE_CHAR_CAP, capped_source
+
+    assert len(capped_source("z" * 500_000)) == SOURCE_CHAR_CAP
+    # Applying it twice must be a no-op — a cap that compounds would shrink the
+    # source silently on any path that happened to call it more than once.
+    once = capped_source("z" * 500_000)
+    assert capped_source(once) == once
 
 
 # ── verdict parsing ───────────────────────────────────────────────────────

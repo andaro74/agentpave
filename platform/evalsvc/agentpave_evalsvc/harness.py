@@ -132,6 +132,30 @@ def system_for(case: GoldenCase) -> str:
     return ENRICHMENT_SYSTEM if case.capability == "enrichment" else SERVE_SYSTEM
 
 
+# One cap, applied once, before the source reaches anything.
+#
+# The predecessor of this constant lived inside `build_judge_content` and
+# capped only the judge, so the serving model answered from the whole fixture
+# while the judge graded a prefix and scored correct answers as fabrications.
+# The lesson is not "pick a better number" — it is that a cap belongs in one
+# place upstream of every consumer, where it cannot be applied to one side.
+#
+# 40k because the schedule fixture is 320k of one day's US listings and sending
+# it twice per case cost $0.11 against a $0.02 budget — the budget caught it,
+# which is what per-case budgets are for. Every fact the schedule cases ask
+# about sits in the first 6.5k, so this is not close to binding.
+#
+# It is a character cut, not a structural one: a truncated JSON array is no
+# longer parseable. That is tolerable because the model reads it as text, and
+# it stops mattering in M04, when a real tool returns filtered results instead
+# of a whole day.
+SOURCE_CHAR_CAP = 40_000
+
+
+def capped_source(source: str) -> str:
+    return source[:SOURCE_CHAR_CAP]
+
+
 def build_case_content(case: GoldenCase, source: str) -> str:
     """The untrusted span of a serving turn: the tool result, then the question.
 
@@ -316,7 +340,9 @@ def run(
     include_adversarial: bool = True,
 ) -> Scorecard:
     """A full run: every golden case, then every probe."""
-    cases = tuple(run_case(case, call, load_fixture(case.fixture)) for case in dataset.golden)
+    cases = tuple(
+        run_case(case, call, capped_source(load_fixture(case.fixture))) for case in dataset.golden
+    )
     probes = (
         tuple(run_probe(probe, call) for probe in dataset.adversarial)
         if include_adversarial

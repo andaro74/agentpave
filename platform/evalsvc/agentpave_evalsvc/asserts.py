@@ -89,7 +89,7 @@ def check_enrichment_schema(answer: str) -> list[str]:
     # several cases assert on individual genre values, and a comma-joined
     # string would satisfy those substring checks while breaking any consumer.
     genres = record.get("genres")
-    if "genres" in record and not isinstance(genres, list):
+    if "genres" in record and genres is not None and not isinstance(genres, list):
         failures.append(f"enrichment schema: 'genres' must be a list, got {type(genres).__name__}")
 
     # `network` is nullable by design — TVMaze records null for shows that
@@ -98,6 +98,15 @@ def check_enrichment_schema(answer: str) -> list[str]:
     if "network" in record and not isinstance(record["network"], (str, type(None))):
         failures.append("enrichment schema: 'network' must be a string or null")
 
+    # Null is a legitimate value for any field, not just `network`. The
+    # enrichment prompt tells the model to return null for anything it cannot
+    # ground in the data, which is the whole point of `enrichment-unknown-show`
+    # — an empty search result must produce a well-formed record of nulls, not
+    # an invented show. Requiring a string here contradicted that instruction
+    # and failed the one case built to test it.
+    #
+    # The schema checks shape; `must_contain` checks content. Cases about real
+    # shows pin their values that way, so nullability here does not weaken them.
     summary = record.get("summary")
     if isinstance(summary, str):
         words = len(summary.split())
@@ -105,8 +114,8 @@ def check_enrichment_schema(answer: str) -> list[str]:
             failures.append(
                 f"enrichment schema: summary is {words} words, cap is {SUMMARY_WORD_CAP}"
             )
-    elif "summary" in record:
-        failures.append("enrichment schema: 'summary' must be a string")
+    elif "summary" in record and summary is not None:
+        failures.append("enrichment schema: 'summary' must be a string or null")
 
     return failures
 

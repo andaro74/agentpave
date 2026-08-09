@@ -26,7 +26,7 @@ from . import adversarial as adversarial_mod
 from . import baseline as baseline_mod
 from . import calibration as calibration_mod
 from . import scorecard as scorecard_mod
-from .harness import EVAL_TEMPERATURE, SERVICE_ID, Caller, run
+from .harness import EVAL_TEMPERATURE, SERVICE_ID, Caller, capped_source, run
 from .judge import JUDGE_FEATURE, JUDGE_SYSTEM, build_judge_content, parse_verdict
 from .models import Baseline, CalibrationSample, Dataset, JudgeVerdict
 
@@ -99,7 +99,9 @@ def _live_scorer(call: Caller, dataset: Dataset):
         case = cases[sample.case_id]
         status, body = call(
             feature_id=JUDGE_FEATURE,
-            prompt=build_judge_content(case, load_fixture(case.fixture), sample.answer),
+            prompt=build_judge_content(
+                case, capped_source(load_fixture(case.fixture)), sample.answer
+            ),
             system=JUDGE_SYSTEM,
             max_tokens=512,
             temperature=EVAL_TEMPERATURE,
