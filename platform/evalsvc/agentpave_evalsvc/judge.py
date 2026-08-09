@@ -77,12 +77,22 @@ def build_judge_content(case: GoldenCase, source: str, answer: str) -> str:
     instructions folded in here are read by `PROMPT_ATTACK` as an injection and
     the call is blocked before any grading happens (ADR-013).
 
-    The source is truncated because a 147-entry schedule fixture is mostly
-    repetition, and a judge prompt that spends its context on the 140th cable
-    news listing grades no better for it. The cap is generous enough that
-    every fact the golden cases assert on survives it.
+    **The source is passed whole.** It used to be truncated at 12k characters
+    "because a schedule fixture is mostly repetition", which was wrong in the
+    way that matters: the serving model answered from the full fixture and the
+    judge graded against a prefix of it. Two of the three substantive fixtures
+    are longer than that cap, and the facts a case asks about tend to live at
+    the end — the latest episode is the last record. The judge scored
+    groundedness 1 on answers that were correct, said so in its rationale
+    ("the source data is truncated"), and the same defect produced the one
+    calibration disagreement.
+
+    A judge must grade what the model was given. If the cost of that becomes a
+    problem, the per-case `cost_usd` budget will fail loudly and we will cap
+    the source in one place for both calls — not silently, and not on one side
+    only.
     """
-    return f"SOURCE:\n{source[:12000]}\n\nQUESTION:\n{case.prompt}\n\nANSWER:\n{answer}\n"
+    return f"SOURCE:\n{source}\n\nQUESTION:\n{case.prompt}\n\nANSWER:\n{answer}\n"
 
 
 def parse_verdict(reply: str) -> JudgeVerdict:

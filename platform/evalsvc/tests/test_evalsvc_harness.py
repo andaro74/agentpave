@@ -14,14 +14,17 @@ import json
 from typing import Any
 
 from agentpave_evalsvc.adversarial import INJECTION_MARKER
+from agentpave_evalsvc.asserts import ENRICHMENT_FIELDS, SUMMARY_WORD_CAP
 from agentpave_evalsvc.dataset import load_dataset
 from agentpave_evalsvc.harness import (
+    ENRICHMENT_SYSTEM,
     EVAL_TEMPERATURE,
     SERVE_SYSTEM,
     build_case_content,
     plan,
     run_case,
     run_probe,
+    system_for,
 )
 from agentpave_evalsvc.judge import JUDGE_SYSTEM
 from agentpave_evalsvc.models import AdversarialProbe, GoldenCase
@@ -202,6 +205,46 @@ def test_serving_instructions_forbid_answering_from_memory():
     """Without this instruction the dataset's hallucination bait tests nothing."""
     assert "only" in SERVE_SYSTEM.lower()
     assert "memory" in SERVE_SYSTEM.lower()
+
+
+def test_enrichment_is_told_the_schema_it_will_be_graded_against():
+    """All eight enrichment cases failed the first honest deployed run with
+    "not valid JSON (Expecting value)". The cases asked for a JSON record and
+    nothing had ever told the model what one looked like — the capability had
+    never worked, at 0%, while `make check` stayed green throughout.
+
+    It stayed green because every hermetic test drives `run_case` with a stub
+    returning whatever the test chose. No stub can discover that a real model
+    was never asked for JSON. This test is the closest hermetic substitute:
+    it pins the prompt to the assertion, so the two cannot drift.
+    """
+    for field in ENRICHMENT_FIELDS:
+        assert field in ENRICHMENT_SYSTEM, f"the schema prompt never names {field!r}"
+    assert str(SUMMARY_WORD_CAP) in ENRICHMENT_SYSTEM
+    # The null-network case exists because Severance has none; a prompt that
+    # did not permit null would push the model to invent one.
+    assert "null" in ENRICHMENT_SYSTEM
+
+
+def test_enrichment_and_the_other_capabilities_get_different_instructions():
+    # One prompt cannot serve both: the judge would be rating JSON, or
+    # `json.loads` would be parsing prose.
+    assert system_for(_case(capability="enrichment", grading="deterministic")) == (
+        ENRICHMENT_SYSTEM
+    )
+    assert system_for(_case(capability="airing")) == SERVE_SYSTEM
+    assert system_for(_case(capability="summarize")) == SERVE_SYSTEM
+
+
+def test_serving_instructions_forbid_the_padding_the_judge_penalised():
+    # Four cases scored groundedness 5, completeness 5, tone 2-3 on preamble
+    # and markdown. Fixed in the prompt, not in the threshold.
+    lowered = SERVE_SYSTEM.lower()
+    assert "preamble" in lowered
+    assert "markdown" in lowered
+    # And the ISO date instruction that makes `must_contain: ["2025-03-21"]`
+    # an assertion about grounding rather than about phrasing.
+    assert "yyyy-mm-dd" in lowered
 
 
 def test_the_guarded_span_carries_the_data_and_none_of_the_instructions():

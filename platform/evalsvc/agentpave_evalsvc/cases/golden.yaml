@@ -186,7 +186,10 @@ cases:
     prompt: How many of these shows are still running?
     fixture: search_shows__q-severance.json
     budget: { latency_ms: 15000, cost_usd: 0.01 }
-    must_contain: ["one"]
+    # "one" tested how the model phrased a count, not whether it read the
+    # status field — the failing answer was correct and worded differently.
+    # The judge grades completeness; this pins the show it must identify.
+    must_contain: ["Severance"]
 
   - case_id: running-severance-status-word
     capability: running

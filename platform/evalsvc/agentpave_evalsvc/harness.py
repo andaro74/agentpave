@@ -24,7 +24,7 @@ import time
 from typing import Any, Protocol
 
 from .adversarial import inject, judge_probe
-from .asserts import run_deterministic
+from .asserts import ENRICHMENT_FIELDS, SUMMARY_WORD_CAP, run_deterministic
 from .dataset import load_fixture
 from .judge import (
     JUDGE_FEATURE,
@@ -83,8 +83,53 @@ EVAL_TEMPERATURE = 0.0
 SERVE_SYSTEM = (
     "You are a TV catalogue assistant. Answer using only the CATALOGUE DATA "
     "the user provides. If the data does not contain the answer, say so "
-    "plainly rather than supplying it from memory."
+    "plainly rather than supplying it from memory.\n\n"
+    # Four summarize cases failed the judge's tone axis at groundedness 5 and
+    # completeness 5 — penalised for "Based on the catalogue data, here is..."
+    # and for markdown headers. The judge was right that this is padding, so
+    # the fix belongs here rather than in the threshold: a gate lowered to
+    # accept preamble would stop measuring the thing it was built to measure.
+    "Answer directly. Do not open with a preamble restating the question or "
+    "the source, do not use markdown headings, bold, or bullet formatting, "
+    "and do not add closing offers of further help.\n"
+    # `must_contain: ["2025-03-21"]` failed against an answer that said
+    # "March 21, 2025". Pinning the format makes the expectation a statement
+    # about grounding rather than about phrasing.
+    "Write dates in ISO form (YYYY-MM-DD), exactly as they appear in the data."
 )
+
+# Enrichment gets its own instructions because it is the one capability whose
+# output is graded by `json.loads` rather than by a judge. All eight enrichment
+# cases failed with "not valid JSON (Expecting value)" on the first honest
+# deployed run: the cases asked for a JSON record and nothing had ever told the
+# model what that record looked like. The capability had never worked, and no
+# hermetic test could have noticed — they all drive `run_case` with a stub that
+# returns whatever the test chose.
+#
+# The field list is built from `ENRICHMENT_FIELDS` rather than retyped, so the
+# prompt and the assertion cannot drift apart.
+ENRICHMENT_SYSTEM = (
+    "You are a TV catalogue enrichment service. Using only the CATALOGUE DATA "
+    "the user provides, reply with a single JSON object and nothing else — no "
+    "prose before or after it, no markdown fence.\n\n"
+    "The object has exactly these keys: " + ", ".join(ENRICHMENT_FIELDS) + ".\n"
+    "`genres` is a list of strings. `network` is the network name, or null if "
+    "the data records none — do not guess one. `runtime` is a number of "
+    "minutes. Every other key is a string.\n"
+    f"Keep `summary` under {SUMMARY_WORD_CAP} words, in plain text.\n"
+    "If the data does not describe the requested show, return the object with "
+    "null for every field you cannot ground in it."
+)
+
+
+def system_for(case: GoldenCase) -> str:
+    """The instructions a case's serving turn carries.
+
+    Split by capability because enrichment is graded by a schema and the rest
+    are graded by a judge — one prompt cannot serve both without asking the
+    judge to rate JSON or asking `json.loads` to parse prose.
+    """
+    return ENRICHMENT_SYSTEM if case.capability == "enrichment" else SERVE_SYSTEM
 
 
 def build_case_content(case: GoldenCase, source: str) -> str:
@@ -160,7 +205,7 @@ def run_case(case: GoldenCase, call: Caller, source: str) -> CaseResult:
         status, body = call(
             feature_id=case.capability,
             prompt=build_case_content(case, source),
-            system=SERVE_SYSTEM,
+            system=system_for(case),
             max_tokens=1024,
             temperature=EVAL_TEMPERATURE,
         )

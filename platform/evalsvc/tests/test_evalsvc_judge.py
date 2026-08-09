@@ -74,9 +74,39 @@ def test_judge_prompt_carries_source_question_and_answer():
     assert "THE ANSWER" in prompt
 
 
-def test_judge_prompt_truncates_a_huge_source():
-    prompt = build_judge_content(_case(), "x" * 50_000, "answer")
-    assert len(prompt) < 20_000
+def test_the_judge_grades_against_the_whole_source_the_model_answered_from():
+    """The defect this replaces cost the suite six cases and one calibration
+    label.
+
+    `build_judge_content` used to cut the source at 12k characters while the
+    serving turn got the fixture whole. Two of the three substantive fixtures
+    are longer than that, and the facts cases ask about cluster at the end —
+    the latest episode is the last record. So the judge scored groundedness 1
+    on correct answers and said why in its rationale: "the source data is
+    truncated and does not contain this information."
+
+    A judge grading a prefix of what the model saw is not a strict judge, it
+    is a broken one. Asymmetry here is always a bug, whatever the cap.
+    """
+    tail = "THE-FACT-AT-THE-END"
+    source = ("x" * 50_000) + tail
+    content = build_judge_content(_case(), source, "answer")
+
+    assert tail in content, "the judge cannot grade a fact it was not shown"
+    assert source in content
+
+
+def test_the_judge_and_the_serving_turn_receive_the_same_source():
+    # Pins the relationship rather than either side's length, so a future cap
+    # has to be applied to both or fail here.
+    from agentpave_evalsvc.harness import build_case_content
+
+    source = "SOURCE-" + ("y" * 30_000) + "-END"
+    served = build_case_content(_case(), source)
+    judged = build_judge_content(_case(), source, "answer")
+
+    assert source in served
+    assert source in judged
 
 
 # ── verdict parsing ───────────────────────────────────────────────────────
