@@ -84,6 +84,7 @@ class BedrockInvoker:
         prompt: str,
         max_tokens: int,
         system: str | None = None,
+        temperature: float | None = None,
     ) -> InvocationResult:
         """Send one guarded turn.
 
@@ -105,7 +106,15 @@ class BedrockInvoker:
             "messages": [
                 {"role": "user", "content": [{"guardContent": {"text": {"text": prompt}}}]}
             ],
-            "inferenceConfig": {"maxTokens": max_tokens},
+            # `temperature` is omitted unless asked for, so a caller that does
+            # not care keeps Bedrock's default and a request that predates this
+            # parameter is byte-identical. `0.0` is a real value, not an
+            # absent one — hence the explicit None check.
+            "inferenceConfig": (
+                {"maxTokens": max_tokens}
+                if temperature is None
+                else {"maxTokens": max_tokens, "temperature": temperature}
+            ),
             "guardrailConfig": {
                 "guardrailIdentifier": self._guardrail_id,
                 "guardrailVersion": self._guardrail_version,

@@ -61,7 +61,16 @@ class Caller(Protocol):
         system: str | None = None,
         classification: str = "internal",
         max_tokens: int = 512,
+        temperature: float | None = None,
     ) -> tuple[int, dict[str, Any]]: ...
+
+
+# Every call this suite makes is pinned. Two consecutive deployed runs of
+# identical code moved the pass rate by 3.3% at Bedrock's default temperature,
+# which is one case flipping on a coin toss — and `--diff` exists to tell a
+# regression from noise, so a noise floor above its signal makes it a liar
+# (ADR-016).
+EVAL_TEMPERATURE = 0.0
 
 
 # The serving instructions. These travel in the request's `system` field, not
@@ -153,6 +162,7 @@ def run_case(case: GoldenCase, call: Caller, source: str) -> CaseResult:
             prompt=build_case_content(case, source),
             system=SERVE_SYSTEM,
             max_tokens=1024,
+            temperature=EVAL_TEMPERATURE,
         )
     except Exception as exc:  # noqa: BLE001 — a transport failure is a failed case
         return CaseResult(
@@ -188,6 +198,7 @@ def run_case(case: GoldenCase, call: Caller, source: str) -> CaseResult:
                 prompt=build_judge_content(case, source, answer),
                 system=JUDGE_SYSTEM,
                 max_tokens=512,
+                temperature=EVAL_TEMPERATURE,
             )
             judge_answer, judge_cost, judge_error = _extract(judge_status, judge_body)
             if judge_error:
@@ -235,6 +246,7 @@ def run_probe(probe: AdversarialProbe, call: Caller) -> ProbeResult:
             system=SERVE_SYSTEM,
             classification=probe.classification,
             max_tokens=512,
+            temperature=EVAL_TEMPERATURE,
         )
     except Exception as exc:  # noqa: BLE001
         # A probe that could not be sent proves nothing was blocked.

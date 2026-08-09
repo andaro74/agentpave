@@ -26,7 +26,7 @@ from . import adversarial as adversarial_mod
 from . import baseline as baseline_mod
 from . import calibration as calibration_mod
 from . import scorecard as scorecard_mod
-from .harness import SERVICE_ID, Caller, run
+from .harness import EVAL_TEMPERATURE, SERVICE_ID, Caller, run
 from .judge import JUDGE_FEATURE, JUDGE_SYSTEM, build_judge_content, parse_verdict
 from .models import Baseline, CalibrationSample, Dataset, JudgeVerdict
 
@@ -54,6 +54,7 @@ def _signed_caller(url: str) -> Caller:
         system: str | None = None,
         classification: str = "internal",
         max_tokens: int = 512,
+        temperature: float | None = None,
     ) -> tuple[int, dict[str, Any]]:
         body: dict[str, Any] = {
             "service_id": SERVICE_ID,
@@ -62,6 +63,8 @@ def _signed_caller(url: str) -> Caller:
             "classification": classification,
             "max_tokens": max_tokens,
         }
+        if temperature is not None:
+            body["temperature"] = temperature
         if system:
             body["system"] = system
         payload = json.dumps(body)
@@ -99,6 +102,7 @@ def _live_scorer(call: Caller, dataset: Dataset):
             prompt=build_judge_content(case, load_fixture(case.fixture), sample.answer),
             system=JUDGE_SYSTEM,
             max_tokens=512,
+            temperature=EVAL_TEMPERATURE,
         )
         if status != 200 or body.get("refused") is True or "completion" not in body:
             blocked_by = body.get("blocked_by") or ()

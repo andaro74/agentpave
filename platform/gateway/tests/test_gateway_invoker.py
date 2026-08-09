@@ -117,6 +117,31 @@ def test_model_and_max_tokens_are_passed_through(
     assert client.calls[0]["inferenceConfig"] == {"maxTokens": 99}
 
 
+def test_temperature_is_omitted_unless_asked_for(
+    invoker: BedrockInvoker, client: FakeBedrock
+) -> None:
+    # Serving keeps Bedrock's default; only the eval suite pins it (ADR-016).
+    invoker.invoke(model_id=HAIKU, prompt="hi", max_tokens=99)
+    assert "temperature" not in client.calls[0]["inferenceConfig"]
+
+
+def test_a_pinned_temperature_reaches_bedrock(invoker: BedrockInvoker, client: FakeBedrock) -> None:
+    invoker.invoke(model_id=HAIKU, prompt="hi", max_tokens=99, temperature=0.0)
+    assert client.calls[0]["inferenceConfig"] == {"maxTokens": 99, "temperature": 0.0}
+
+
+def test_zero_is_a_value_not_an_absence(invoker: BedrockInvoker, client: FakeBedrock) -> None:
+    """The bug a falsy check would introduce, and the whole point of the change.
+
+    `if temperature:` drops 0.0 — the one value the eval suite actually sends —
+    leaving every run sampling at Bedrock's default while the code reads as
+    though it were pinned. The determinism would be silently absent and the
+    scorecard would keep flapping.
+    """
+    invoker.invoke(model_id=HAIKU, prompt="hi", max_tokens=99, temperature=0.0)
+    assert client.calls[0]["inferenceConfig"]["temperature"] == 0.0
+
+
 def test_guardrail_intervention_is_reported_as_blocked() -> None:
     client = FakeBedrock(
         _converse_response(

@@ -87,6 +87,7 @@ class Gateway:
             prompt=request.prompt,
             max_tokens=request.max_tokens,
             system=request.system,
+            temperature=request.temperature,
         )
 
         # Blocked calls are metered with their real token counts: Bedrock bills

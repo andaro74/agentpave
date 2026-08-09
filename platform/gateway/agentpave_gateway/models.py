@@ -56,6 +56,10 @@ class GatewayRequest(_Strict):
     system: str | None = Field(default=None, max_length=SYSTEM_MAX_CHARS)
     classification: DataClassification = "internal"
     max_tokens: int = Field(default=512, ge=1, le=4096)
+    # Left unset by default so serving keeps Bedrock's own default. The eval
+    # service pins it to 0: a golden set graded at temperature 1 flaps, and a
+    # score diff cannot separate a regression from a resample (ADR-016).
+    temperature: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class Usage(_Strict):

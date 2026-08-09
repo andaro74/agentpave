@@ -16,6 +16,7 @@ from typing import Any
 from agentpave_evalsvc.adversarial import INJECTION_MARKER
 from agentpave_evalsvc.dataset import load_dataset
 from agentpave_evalsvc.harness import (
+    EVAL_TEMPERATURE,
     SERVE_SYSTEM,
     build_case_content,
     plan,
@@ -246,6 +247,28 @@ def test_a_serving_turn_sends_instructions_as_system_not_as_prompt():
     # The answer under evaluation is untrusted: a model wrote it.
     assert "Apple TV" in judging["prompt"]
     assert "groundedness" not in judging["prompt"]
+
+
+def test_every_call_the_suite_makes_is_temperature_pinned():
+    """Two consecutive deployed runs of identical code moved the pass rate by
+    3.3%. That is one case flipping on a coin toss, and `--diff` — whose only
+    job is separating a regression from noise — printed "no regression" over
+    the top of it.
+
+    Serving, judging, and probing are all pinned. Leaving any one unpinned
+    leaves the score flapping through that path (ADR-016).
+    """
+    seen: list[float | None] = []
+
+    def call(*, feature_id: str, prompt: str, temperature: float | None = None, **_):
+        seen.append(temperature)
+        return _completion(GOOD_VERDICT if feature_id == "judge" else "an answer")
+
+    run_case(_case(), call, "src")
+    run_probe(AdversarialProbe(probe_id="p", why="w", prompt="attack"), call)
+
+    assert seen == [EVAL_TEMPERATURE, EVAL_TEMPERATURE, EVAL_TEMPERATURE]
+    assert EVAL_TEMPERATURE == 0.0
 
 
 def test_an_injected_probe_keeps_its_payload_inside_the_guarded_span():
