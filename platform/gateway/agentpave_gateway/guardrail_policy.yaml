@@ -35,8 +35,14 @@ content_filters:
   - type: INSULTS
     input_strength: MEDIUM
     output_strength: MEDIUM
+  # Asymmetric, and deliberately so (ADR-017). At HIGH on the input side this
+  # filter blocked a day of US television listings — the platform's own
+  # catalogue — failing four golden cases on data TVMaze publishes openly. A
+  # programme guide is not the same trust level as something the model writes,
+  # so the input side is relaxed and the output side is not: we trust the
+  # catalogue as data, never the model as an author.
   - type: SEXUAL
-    input_strength: HIGH
+    input_strength: LOW
     output_strength: HIGH
   - type: VIOLENCE
     input_strength: MEDIUM
