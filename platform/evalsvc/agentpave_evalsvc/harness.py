@@ -110,7 +110,8 @@ SERVE_SYSTEM = (
 # prompt and the assertion cannot drift apart.
 ENRICHMENT_SYSTEM = (
     "You are a TV catalogue enrichment service. Using only the CATALOGUE DATA "
-    "the user provides, describe the show's metadata record.\n\n"
+    "the user provides, reply with a single JSON object and nothing else — no "
+    "prose before or after it, no markdown fence.\n\n"
     "The object has exactly these keys: " + ", ".join(ENRICHMENT_FIELDS) + ".\n"
     "`genres` is a list of strings. `network` is the network name, or null if "
     "the data records none — do not guess one. `runtime` is a number of "
