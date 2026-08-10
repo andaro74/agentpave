@@ -92,9 +92,22 @@ def load_dataset(
             AdversarialProbe.model_validate(entry)
             for entry in _read_yaml(dataset_dir / "adversarial.yaml", "probes")
         )
-        calibration = tuple(
-            CalibrationSample.model_validate(entry)
-            for entry in _read_yaml(dataset_dir / "calibration.yaml", "samples")
+        # Calibration is optional *by absence only*. A scaffolded service has
+        # never run, so no answers exist for a person to label, and inventing
+        # samples to fill the file would hand the gate an agreement rate nobody
+        # measured. A present file is still parsed strictly.
+        #
+        # This is not a hole: a dataset with no calibration may not contain a
+        # judged case, checked below. Absent calibration buys a smaller gate,
+        # not a laxer one.
+        calibration_file = dataset_dir / "calibration.yaml"
+        calibration = (
+            tuple(
+                CalibrationSample.model_validate(entry)
+                for entry in _read_yaml(calibration_file, "samples")
+            )
+            if calibration_file.exists()
+            else ()
         )
     except ValidationError as exc:
         raise DatasetError(f"dataset failed schema validation:\n{exc}") from exc
@@ -106,6 +119,21 @@ def load_dataset(
     unknown = sorted({s.case_id for s in calibration} - known)
     if unknown:
         raise DatasetError(f"calibration references unknown case_id(s): {', '.join(unknown)}")
+
+    # An uncalibrated judge is not a judge — its verdicts are unmeasured, and a
+    # gate built on unmeasured verdicts is worse than no gate because it looks
+    # like coverage. So a judged case and zero calibration samples is a
+    # load-time failure, not a run that quietly grades with an unknown judge.
+    #
+    # This is the pairing that makes calibration safe to omit: a dataset can
+    # drop calibration only by also dropping every judged case.
+    judged = sorted(c.case_id for c in golden if c.grading == "judged")
+    if judged and not calibration:
+        raise DatasetError(
+            f"{len(judged)} judged case(s) but no calibration samples "
+            f"({dataset_dir / 'calibration.yaml'}) — a judge nobody measured cannot grade; "
+            f"label answers by hand or set those cases to 'deterministic': {', '.join(judged[:5])}"
+        )
 
     referenced = {c.fixture for c in golden} | {
         p.inject_into_fixture for p in adversarial if p.inject_into_fixture

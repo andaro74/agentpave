@@ -102,6 +102,58 @@ def test_shipped_fixtures_resolve_to_bodies():
 # ── the ways it must refuse ───────────────────────────────────────────────
 
 
+def test_an_absent_calibration_file_loads_as_no_calibration(scratch):
+    """A scaffolded service has never run, so no answers exist for a person to
+    label. Requiring the file would force whoever scaffolds a service to invent
+    samples, and the gate would then trust an agreement rate nobody measured.
+
+    Absent, not empty: a `calibration.yaml` that is present and empty is still
+    rejected, because someone wrote that file and meant something by it.
+    """
+    dataset_dir, fixture_dir = scratch
+    # Deterministic, because the rule below is what makes this safe: a dataset
+    # may drop calibration only by also dropping every judged case.
+    _write(
+        dataset_dir,
+        cases=[{**VALID_CASE, "grading": "deterministic"}],
+        probes=[VALID_PROBE],
+        samples=[VALID_SAMPLE],
+    )
+    (dataset_dir / "calibration.yaml").unlink()
+
+    dataset = load_dataset(dataset_dir, fixture_dir)
+    assert dataset.calibration == ()
+
+
+def test_a_judged_case_with_no_calibration_is_rejected(scratch):
+    """The pairing that keeps an absent calibration file from being a hole.
+
+    An uncalibrated judge is not a judge — its verdicts are unmeasured, and a
+    gate built on unmeasured verdicts is worse than no gate because it looks
+    like coverage. A dataset may drop calibration only by also dropping every
+    judged case.
+    """
+    dataset_dir, fixture_dir = scratch
+    _write(
+        dataset_dir,
+        cases=[{**VALID_CASE, "capability": "airing", "grading": "judged"}],
+        probes=[VALID_PROBE],
+        samples=[VALID_SAMPLE],
+    )
+    (dataset_dir / "calibration.yaml").unlink()
+
+    with pytest.raises(DatasetError, match="no calibration samples"):
+        load_dataset(dataset_dir, fixture_dir)
+
+
+def test_the_shipped_dataset_is_judged_and_calibrated(scratch):
+    """The platform's own dataset is on the other side of that rule, and stays
+    there: judged cases plus the samples that measure the judge grading them."""
+    dataset = load_dataset()
+    assert any(case.grading == "judged" for case in dataset.golden)
+    assert dataset.calibration
+
+
 def test_unknown_key_in_a_case_is_rejected(scratch):
     """A typo'd key would silently drop an expectation."""
     dataset_dir, fixture_dir = scratch
