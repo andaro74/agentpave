@@ -47,7 +47,7 @@ def test_the_seed_dataset_loads_through_the_platform_loader(service: Path):
     dataset = load_dataset(service / "eval")
 
     assert len(dataset.golden) == 5
-    assert len(dataset.adversarial) == 4
+    assert len(dataset.adversarial) == 5
 
 
 def test_every_seed_case_is_deterministic(service: Path):
@@ -106,12 +106,16 @@ def test_the_encoded_probe_trips_the_gateway_screen(service: Path):
     price of one function call.
     """
     dataset = load_dataset(service / "eval")
-    encoded = next(p for p in dataset.adversarial if "encoded" in p.probe_id)
+    encoded = [p for p in dataset.adversarial if "encoded" in p.probe_id]
+    # Two encodings, deliberately. A suite green on base64 alone reads as
+    # resistance to obfuscation generally, and ADR-014 says it is not.
+    assert len(encoded) == 2
 
-    assert find_encoded_text(encoded.prompt), (
-        "the encoded probe carries no base64 the screen recognises — it would "
-        "reach the model and be scored `model_complied`"
-    )
+    for probe in encoded:
+        assert find_encoded_text(probe.prompt), (
+            f"{probe.probe_id} carries nothing the screen recognises — it would "
+            "reach the model and be scored `model_complied`"
+        )
 
 
 def test_the_sensitive_probe_is_refused_by_the_routing_table(service: Path):
@@ -208,3 +212,42 @@ def test_the_dataset_the_gate_points_at_is_the_one_that_ships(service: Path):
     assert referenced == {"eval"}
     assert (service / "eval" / "golden.yaml").exists()
     assert (service / "eval" / "adversarial.yaml").exists()
+
+
+# ── the template's features route where they need to ──────────────────────
+
+
+def test_every_feature_the_template_declares_routes_somewhere(service: Path):
+    """The routing table defaults *open*.
+
+    A feature the gateway has never heard of quietly gets the fast model, and
+    nothing in a passing run reveals it. M03 lost an afternoon to exactly this:
+    `judge` was unlisted, so the judge ran on the model it was grading, and the
+    suite would have gone green while measuring nothing.
+
+    So the template's declared features are checked against the real routing
+    table, not against a comment.
+    """
+    import re
+
+    source = (service / "agentpave_catalog_agent" / "agent.py").read_text(encoding="utf-8")
+    declared = re.search(r"^FEATURES = \((.*?)\)", source, re.MULTILINE | re.DOTALL)
+    assert declared, "the rendered agent declares no FEATURES tuple"
+    features = re.findall(r'"([a-z_]+)"', declared.group(1))
+    assert features
+
+    table = RoutingTable(model_fast="fast-model-id", model_capable="capable-model-id")
+    for feature in features:
+        assert table.route(feature, "internal").model_id is not None
+
+
+def test_enrichment_is_not_silently_downgraded(service: Path):
+    """The one feature where the default-open behaviour would be wrong.
+
+    Enrichment returns a schema and is graded on it; running it on the fast
+    model is a downgrade that shows up as a lower score and never as an error.
+    It has to be in the gateway's `CAPABLE_FEATURES`, and this fails if someone
+    removes it.
+    """
+    table = RoutingTable(model_fast="fast-model-id", model_capable="capable-model-id")
+    assert table.route("enrichment", "internal").model_id == "capable-model-id"
