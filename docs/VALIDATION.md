@@ -21,15 +21,38 @@ CI runs the hermetic gates; a human runs everything below.
 
 | 2026-08-10 | M03 | deployed | Judge experiment: does tightening groundedness change the 30/30? **Reverted.** | Curation had caught the judge passing a near-miss — three claims correct, "still running" invented. The hypothesis was that `JUDGE_SYSTEM` implied but never stated that groundedness is bounded by the weakest claim, so a clause was added saying a single unsupported claim caps it at 2 however many others are right, plus a lint rule so removing it would be as loud as dropping an axis. **Both effects were negative.** Calibration did not move: 9/10, same disagreement, `judge=pass human=fail` on the same sample — the blind spot is not a phrasing problem and does not yield to being told the rule more explicitly. Worse, the score fell 30/30 → 28/30 for an unrelated reason the change caused: the added instruction ("check each claim separately before scoring") pushed the judge into prose reasoning *before* its JSON, and on two cases it emitted `{groundedness, completeness, tone}` with no `rationale` at all. A grader asked to reason more stopped honouring its output contract | Reverted; the shipped prompt is unchanged. Three things were learned and one guard proved itself. (1) The near-miss blind spot is real, reproducible, and **not fixable by prompt wording** — closing it needs a different mechanism (a claim-extraction pass, or a groundedness-only second judge), which is M07 scope, not a tweak. (2) Adding reasoning instructions to a component that must emit strict JSON degrades the contract; the judge is not a chat surface. (3) The failure was visible only because `parse_verdict` refuses a malformed verdict and `run_case` fails the case — a judge that defaulted a missing score would have reported 30/30 and hidden it. **And the baseline guard written an hour earlier fired on its first outing**: "not recording a baseline: … failed, and a failing run must not become the bar", so the 30/30 control survived the failed experiment intact. The near-miss remains open and is now a documented limit rather than a suspicion |
 
+| 2026-08-10 | M04 | hermetic | `make check` — 541 tests, ruff, `cdk synth` with the service stack's IAM assertions; plus five mutations across the new gates | Green, and the two gates that matter here found things nothing else could. **The render gate** (render to a temp dir, then run the scaffolded service's own `ruff check`, `ruff format --check` and `pytest`) caught three defects that every unit test passed through: import order, an 88-vs-100 column mismatch because the rendered service had no lint config of its own, and a tuple literal built with `repr()` — single-quoted, with a magic trailing comma — that failed the scaffolded service's own formatter. That last one is the argument for the gate in miniature: the committed sample looked clean only because the repo-wide `ruff format` had silently repaired it, so **only a fresh render ever sees the truth**. **The drift test**, added the same day, caught the committed sample already two template edits behind on its first run. Two mutations survived and both were real holes: a `gate.yml` naming `--adversarial`, a flag that does not exist, parsed cleanly because argparse resolves unambiguous prefixes — and the obvious fix (`allow_abbrev=False` on the root parser) changed nothing, because every flag `pave` has belongs to a subcommand and subparsers do not inherit it | Fixed, each with the test that kills it. Five ADRs written (018 thin loop, 019 OTEL without a collector, 020 Cedar-derived allow-list, 021 sample-as-workspace-member, 022 scaffolded judge off) and ADR-023 for a defect found while building `make walkthrough`: the agent passed the user's whole question to `search_show`, so *"What network airs Severance?"* asked the catalogue for a fixture that does not exist and Act 1 would have failed at the tool before reaching a model. Both open items on the template checklist were closed during the review rather than re-read more charitably |
+
 ## M04 AgentCore-migration checklist (per ADR-003)
 
 To be checked at M04 review; each item keeps the Lambda→AgentCore path a
 packaging change rather than a redesign.
 
-- [ ] Agent role holds zero `bedrock:*` permissions (also asserted in synth)
-- [ ] All tool access via MCP; no direct service calls from the agent
-- [ ] No in-process state survives a request
-- [ ] OTEL spans use GenAI semantic conventions end to end
+**Reviewed 2026-08-10.** Each item names what verifies it, because a ticked box
+whose evidence is "I read the code" is a box that unticks itself the next time
+someone edits the code.
+
+- [x] Agent role holds zero `bedrock:*` permissions (also asserted in synth) —
+      `test_service_stack.py` asserts it two ways: no statement matching
+      `bedrock:` anywhere in the role, and a permissions boundary whose allowed
+      actions are an explicit six that do not include it. The negative
+      assertion had to be tightened once: matching `bedrock` without the colon
+      false-positived on the boundary's own description, *"no Bedrock, ever"*
+- [x] All tool access via MCP; no direct service calls from the agent —
+      `tools.py` is the only egress and it speaks MCP; the render gate asserts
+      no `bedrock-runtime` or `client("bedrock` string survives in any rendered
+      file. The allow-list itself is derived from Cedar rather than written
+      (ADR-020), so the rendered service and the policy cannot disagree
+- [x] No in-process state survives a request — the handler builds everything
+      per invocation and the rendered suite invokes it **twice**
+      (`test_the_handler_survives_a_warm_invocation`,
+      `test_no_state_survives_between_requests`)
+- [~] OTEL spans use GenAI semantic conventions end to end — the attribute
+      names are constants asserted hermetically and `traceparent` is propagated
+      by hand across all three hops (ADR-019). **"End to end" is not yet
+      demonstrated**: that spans actually arrive is the `traced` act of
+      `make walkthrough`, which no human has run. Left half-ticked deliberately
+      rather than claimed
 
 ## M04 template checklist (per ADR-004, ADR-005, ADR-009)
 
@@ -37,45 +60,97 @@ Constraints M01 and M02 created for the scaffolder. Each is a way the template
 could render output that fails its own `make check` on first run — or worse,
 passes it and fails deployed.
 
-- [ ] Rendered tests use component-prefixed basenames — pytest's prepend import
-      mode requires them unique across the monorepo (ADR-004)
-- [ ] Scaffolded services reach models only through the gateway, and therefore
-      inherit the central guardrail rather than declaring one (ADR-005)
-- [ ] Any model a template can route to has a price in `pricing.yaml`, or
-      metering records it as free (ADR-006)
-- [ ] Any HTTP-served component ships a hermetic test that drives its Lambda
+**Reviewed 2026-08-10.** Two of these were still open when the review started
+and are ticked because they were closed during it, not because they were
+re-read more charitably.
+
+- [x] Rendered tests use component-prefixed basenames — pytest's prepend import
+      mode requires them unique across the monorepo (ADR-004).
+      `test_test_basenames_are_prefixed_by_service`, and the render gate runs
+      the scaffolded suite in the monorepo where a collision would surface
+- [x] Scaffolded services reach models only through the gateway, and therefore
+      inherit the central guardrail rather than declaring one (ADR-005). The
+      template renders no guardrail id and no Bedrock client; the render gate
+      asserts the absence and the synth assertions assert the missing IAM
+- [x] Any model a template can route to has a price in `pricing.yaml`, or
+      metering records it as free (ADR-006). Satisfied structurally: the
+      template names no model at all. It sends a `feature_id` and the gateway's
+      routing table chooses, so a scaffolded service cannot reach a model the
+      gateway has not already priced
+- [x] Any HTTP-served component ships a hermetic test that drives its Lambda
       handler with a real event, and invokes it **twice** — M02's warm-container
       failure was invisible to both `make check` and a single manual probe
-      (ADR-009)
-- [ ] Any deployed gate that talks to an IAM-authenticated endpoint signs its
+      (ADR-009). `test_the_handler_survives_a_warm_invocation` and
+      `test_no_state_survives_between_requests`, both rendered into every
+      scaffolded service
+- [x] Any deployed gate that talks to an IAM-authenticated endpoint signs its
       requests, and treats transport failure as an error rather than as a
       result — otherwise "the call failed" tests pass against a dead endpoint
-      (ADR-009)
-- [ ] No scaffolded eval case, probe, or fixture contains a PII-shaped string
-      (ADR-011, standing rule 3)
-- [ ] Any feature the template can route to is listed in the gateway's
+      (ADR-009). `walkthrough._ask` signs with SigV4; every `judge_*` treats a
+      status it did not expect as a failure, and `test_a_non_200_fails` /
+      `test_an_empty_run_does_not_pass` pin both halves
+- [x] No scaffolded eval case, probe, or fixture contains a PII-shaped string
+      (ADR-011, standing rule 3). `test_the_template_renders_no_pii_shaped_string`
+      scans every rendered file — now including the seed dataset and probes,
+      which is what made the test load-bearing rather than theoretical
+- [x] Any feature the template can route to is listed in the gateway's
       `CAPABLE_FEATURES` or is genuinely fine on the fast model — the routing
       table defaults *open*, so an unlisted feature is silently downgraded and
-      nothing in a passing run reveals it (M03: `judge` was that feature)
-- [ ] Any Python package the template renders is named `agentpave_<component>`
+      nothing in a passing run reveals it (M03: `judge` was that feature).
+      **Was open at review; closed during it.** The template carried a comment
+      about this and no test. It now cross-checks the rendered `FEATURES`
+      against the real `RoutingTable`, and pins `enrichment` to the capable
+      model specifically, since that is the one where a downgrade shows up as a
+      lower score and never as an error
+- [x] Any Python package the template renders is named `agentpave_<component>`
       and never shares a name with its own directory — a directory that matches
-      a module name shadows it as a namespace package (M03: `pave/`, ADR-004)
-- [ ] Rendered CLI output is encoded explicitly, not left to the console's code
+      a module name shadows it as a namespace package (M03: `pave/`, ADR-004).
+      `test_the_package_never_shares_a_name_with_its_directory`
+- [x] Rendered CLI output is encoded explicitly, not left to the console's code
       page — `capsys` never sees an encoding error, so the hermetic gate cannot
-      catch one (M03: `pave eval --dry-run` on cp1252)
-- [ ] Scaffolded callers put instructions in `system` and tool output in
+      catch one (M03: `pave eval --dry-run` on cp1252). **Not applicable as
+      written, and recorded rather than silently ticked:** the template renders
+      no CLI. The constraint bites on `pave` itself, where
+      `_force_utf8_output` has a test that drives a cp1252 stream. It bit again
+      during M04 — `curate.py` hit the identical `UnicodeEncodeError` on its
+      first run and took the same guard
+- [x] Scaffolded callers put instructions in `system` and tool output in
       `prompt`, and ship the test that pins the split. Instructions inside the
       guarded span are read as an injection and blocked; tool output inside
       `system` skips the prompt-attack filter entirely. The first failure is
-      loud, the second is silent (ADR-013)
-- [ ] Every scaffolded probe's expected control is reachable from the endpoint
+      loud, the second is silent (ADR-013).
+      `test_tool_output_reaches_the_model_as_untrusted_content` asserts both
+      directions, and the rendered README leads with the mistake
+- [x] Every scaffolded probe's expected control is reachable from the endpoint
       the probe is sent to. A probe naming a control outside its own request
       path cannot pass whatever the platform does (M03:
       `injection-tool-escalation` expected a Cedar denial from the gateway,
-      which has no Cedar — ADR-015)
-- [ ] The adversarial suite gains a non-base64 obfuscation probe. The encoded
+      which has no Cedar — ADR-015). Checked against the *real* controls, not
+      asserted in a comment: the encoded probes go through `find_encoded_text`
+      and the sensitive probe through `RoutingTable`. A tripwire test also
+      fails any probe mentioning Cedar or tool escalation
+- [x] The adversarial suite gains a non-base64 obfuscation probe. The encoded
       screen closes exactly one encoding, and a green suite would otherwise
-      read as resistance to obfuscation generally (ADR-014)
+      read as resistance to obfuscation generally (ADR-014). **Was open at
+      review; closed during it, control first.** The screen now decodes hex as
+      well, and both the platform suite (10 probes) and the seed suite (5) have
+      a probe for it. rot13 is still not covered, and that is now a decision
+      with a test named after it rather than a gap: rot13 of English is
+      printable prose that rot13s back to English, so a "decodes to readable
+      text" screen would flag every ordinary sentence. Separating them needs a
+      dictionary, and a control that refuses requests on a word list is a
+      false-positive engine
+
+### Still open at M04's hermetic close
+
+- The `traced` act of `make walkthrough` has never run. Everything else in
+  these two checklists is verified by `make check`; that one needs AWS.
+- The 30 golden cases and 10 probes remain uncurated (M03 curated only the 10
+  calibration samples, at a 20% edit rate).
+- `shows_99999999_episodes.json` — the recorded 404 — is still referenced by no
+  case and no probe.
+- The judge's near-miss blind spot (M03) is unfixed and documented as M07
+  scope.
 
 ## Ad-hoc reviews
 
