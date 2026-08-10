@@ -73,6 +73,26 @@ def render(result: ScoreDiff) -> str:
     return "\n".join(lines)
 
 
+def is_recordable(card: Scorecard) -> bool:
+    """Whether this run may become the baseline others are measured against.
+
+    Only a passing run. A baseline is the standard to beat, and recording a
+    failing run makes the platform's own worst day the bar — the next run then
+    "improves" on a regression and `--diff` reports no problem.
+
+    This is not hypothetical. M03's teeth demonstration deliberately broke the
+    service, scored 19/30, and `--save-baseline` wrote it down; the score
+    history now contains a dip that never happened, and M05's trend chart will
+    show a regression nobody caused. That row stays — deleting measurements to
+    make a chart look better is the exact instinct this platform exists to
+    resist — but the rule changes so it cannot recur.
+
+    `Scorecard.passed` already requires every case *and* every probe, so a
+    guardrail failure blocks a baseline just as a quality failure does.
+    """
+    return card.passed
+
+
 # ── wiring (touches AWS; runs only under the deployed gates) ──────────────
 
 

@@ -7,7 +7,7 @@ that is where a quality regression and a dataset defect are easiest to confuse.
 
 from __future__ import annotations
 
-from agentpave_evalsvc.baseline import diff, render
+from agentpave_evalsvc.baseline import diff, is_recordable, render
 from agentpave_evalsvc.calibration import calibrate, meets_floor
 from agentpave_evalsvc.calibration import render as render_calibration
 from agentpave_evalsvc.judge import JudgeError
@@ -16,6 +16,7 @@ from agentpave_evalsvc.models import (
     CalibrationSample,
     CaseResult,
     JudgeVerdict,
+    ProbeResult,
     Scorecard,
 )
 
@@ -199,3 +200,37 @@ def test_enough_unreadable_verdicts_close_the_gate():
 def test_an_empty_calibration_set_never_meets_the_floor():
     """Zero samples is not 100% agreement; it is no evidence at all."""
     assert not meets_floor(calibrate((), lambda s: _verdict(True)))
+
+
+# ── what may become a baseline ────────────────────────────────────────────
+
+
+def test_only_a_passing_run_may_become_the_baseline():
+    """A baseline is the standard to beat, so a failing run must not set it.
+
+    M03's teeth demonstration broke the service deliberately, scored 19/30,
+    and `--save-baseline` wrote it down. The next run then "improved" on a
+    regression nobody caused, and the score history carries a dip that never
+    happened.
+    """
+    failing = _card([("a", "airing", True), ("b", "airing", False)])
+    passing = _card([("a", "airing", True), ("b", "airing", True)])
+
+    assert not is_recordable(failing)
+    assert is_recordable(passing)
+
+
+def test_a_failed_probe_also_blocks_the_baseline():
+    """`Scorecard.passed` covers probes as well as cases, so a guardrail
+    failure keeps a run out of the history exactly like a quality failure."""
+    card = Scorecard(
+        run_id="run-3",
+        created_at="2026-08-09T00:00:00+00:00",
+        model_serve="serve",
+        model_judge="judge",
+        cases=(
+            CaseResult(case_id="a", capability="airing", passed=True, latency_ms=1, cost_usd=0.0),
+        ),
+        probes=(ProbeResult(probe_id="p", outcome="model_complied", passed=False, detail="d"),),
+    )
+    assert not is_recordable(card)

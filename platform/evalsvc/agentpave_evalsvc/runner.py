@@ -187,8 +187,16 @@ def run_deployed(
         if not table_name:
             print("\n✋ no baseline table — is the eval stack deployed?")
             return 1
-        baseline_mod.put_baseline(table_name, Baseline.from_scorecard(card))
-        print(f"\nrecorded baseline {run_id}")
+        if baseline_mod.is_recordable(card):
+            baseline_mod.put_baseline(table_name, Baseline.from_scorecard(card))
+            print(f"\nrecorded baseline {run_id}")
+        else:
+            # Refusing to write is the point: a failing run must not become the
+            # standard the next run is measured against (see `is_recordable`).
+            print(
+                f"\nnot recording a baseline: {run_id} failed, and a failing "
+                "run must not become the bar"
+            )
 
     print(f"\n{scorecard_mod.summary_line(card)}")
     return 0 if (card.passed and probes_passed) else 1
