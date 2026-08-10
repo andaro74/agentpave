@@ -42,10 +42,15 @@ samples:
 
   - case_id: airing-severance-status
     human_pass: true
-    note: correct status and correct latest episode; no invented third season
+    note: >-
+      correctly reports that the episode list cannot say whether the show is
+      still running, instead of inventing a status — and gets the latest
+      episode right. Declining the ungroundable half is the behaviour this
+      sample exists to reward.
     answer: >-
-      Severance is still running. Its most recent episode is Cold Harbor, the
-      tenth episode of season 2, which aired on 2025-03-21.
+      The catalogue data does not say whether Severance is still running; it
+      lists episodes only. The most recent is Cold Harbor, the tenth episode
+      of season 2, which aired on 2025-03-21.
 
   - case_id: summarize-no-results
     human_pass: true
@@ -68,10 +73,13 @@ samples:
 
   - case_id: airing-severance-status
     human_pass: false
-    note: invents a third season the episode list does not contain
+    note: >-
+      the near-miss: three of four claims check out, but "still running" is
+      invented — the episodes fixture has no status field. A judge that passes
+      this is rewarding fluency over grounding.
     answer: >-
-      Severance is running and is currently airing its third season; the most
-      recent episode aired earlier this month.
+      Severance is still running. Its most recent episode is Cold Harbor, the
+      tenth episode of season 2, which aired on 2025-03-21.
 
   - case_id: running-severance-search-set
     human_pass: false
