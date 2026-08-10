@@ -42,6 +42,44 @@ class ScaffoldError(Exception):
     """The render could not proceed. Always raised before anything is written."""
 
 
+def granted_tools(agent_id: str) -> tuple[str, ...]:
+    """Which tools Cedar actually permits this identity to invoke.
+
+    Asked rather than assumed. A hand-written allow-list in a scaffolded
+    service is a comment: it can claim access the policy does not grant, or
+    omit access it does, and nothing notices until a Cedar denial turns up in
+    CloudWatch. Deriving it here means the rendered service and the policy
+    cannot disagree at birth.
+
+    A brand-new identity gets an **empty** tuple, and that is the correct and
+    instructive answer — Cedar is default-deny, so an agent nobody has written
+    a `permit` for has no tools. The template says so in the rendered file
+    rather than leaving a confusing blank.
+    """
+    from agentpave_registry.authz import Authorizer
+
+    authorizer = Authorizer(known_agents=[agent_id])
+    return tuple(
+        sorted(
+            name for name in authorizer.registry.names if authorizer.decide(agent_id, name).allowed
+        )
+    )
+
+
+def _tuple_literal(values: tuple[str, ...]) -> str:
+    """A tuple literal the formatter will leave alone.
+
+    Rendered code has to be *already* formatted, because the scaffolded service
+    runs `ruff format --check` in its own gate and nothing upstream will tidy
+    it. This is easy to get wrong in a way that hides: the committed sample
+    service gets silently repaired by the repo-wide formatter, so only the
+    render gate — which formats a fresh render — ever sees the defect.
+    """
+    if len(values) == 1:
+        return f'("{values[0]}",)'
+    return "(" + ", ".join(f'"{value}"' for value in values) + ")"
+
+
 @dataclass(frozen=True)
 class ServiceSpec:
     """Everything the template is allowed to know about the service."""
@@ -64,12 +102,22 @@ class ServiceSpec:
         return "test_" + self.name.replace("-", "_")
 
     def as_context(self) -> dict[str, str]:
+        tools = granted_tools(self.name)
         return {
             "name": self.name,
             "package": self.package,
             "classification": self.classification,
             "stack_name": self.stack_name,
             "test_prefix": self.test_prefix,
+            # A complete, already-formatted tuple literal — not a fragment the
+            # template assembles. Two details the formatter cares about and a
+            # naive `repr` gets wrong: strings are double-quoted, and a
+            # trailing comma is present only for a one-element tuple, where it
+            # is grammar. Anywhere else it is a "magic trailing comma" that
+            # makes ruff explode the literal across lines, and the rendered
+            # service then fails its own `ruff format --check`.
+            "allowed_tools": _tuple_literal(tools),
+            "has_tools": "true" if tools else "",
         }
 
 

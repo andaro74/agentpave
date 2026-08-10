@@ -5,6 +5,9 @@ description = "The AgentPave platform CLI: new / eval / shadow-eval"
 requires-python = ">=3.12"
 dependencies = [
     "agentpave-evalsvc",
+    # The scaffolder asks Cedar what a new identity is granted rather than
+    # hand-writing an allow-list into the rendered service (ADR-020).
+    "agentpave-registry",
     # The scaffolder renders Python and YAML that themselves contain braces,
     # so `str.format`-style substitution is not viable. StrictUndefined is the
     # reason for a real engine rather than regex replacement: a template

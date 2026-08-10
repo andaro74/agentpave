@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 from agentpave_pave.cli import TEMPLATE_ROOT
-from agentpave_pave.scaffold import ScaffoldError, render, validate
+from agentpave_pave.scaffold import ScaffoldError, granted_tools, render, validate
 
 TEMPLATE = TEMPLATE_ROOT / "agent-tools"
 
@@ -127,6 +127,67 @@ def test_the_template_renders_no_pii_shaped_string(tmp_path: Path):
         text = path.read_text(encoding="utf-8")
         for pattern in patterns:
             assert not pattern.search(text), f"{path.name} carries a PII-shaped string"
+
+
+# ── the allow-list comes from policy, not from the author ─────────────────
+
+
+def test_the_granted_tools_come_from_cedar(tmp_path: Path) -> None:
+    """The rendered allow-list is asked, not assumed.
+
+    A hand-written list in a scaffolded service is a comment: it can claim
+    access the policy does not grant, or omit access it does, and nothing
+    notices until a Cedar denial appears in CloudWatch. `catalog-agent` has a
+    `permit` covering the catalogue group, so all three tools render.
+    """
+    assert granted_tools("catalog-agent") == ("get_episodes", "get_schedule", "search_show")
+
+    render(validate("catalog-agent", "internal"), template_root=TEMPLATE, output_root=tmp_path)
+    tools = (tmp_path / "catalog-agent" / "agentpave_catalog_agent" / "tools.py").read_text(
+        encoding="utf-8"
+    )
+    # Double-quoted, because rendered code has to arrive already formatted —
+    # `repr()` would emit single quotes and the service would fail its own
+    # `ruff format --check`.
+    allow_line = next(line for line in tools.splitlines() if line.startswith("ALLOWED_TOOLS"))
+    for tool in granted_tools("catalog-agent"):
+        assert f'"{tool}"' in allow_line
+
+
+def test_an_identity_nobody_granted_scaffolds_with_no_tools(tmp_path: Path) -> None:
+    """Cedar is default-deny, so a new agent has nothing until someone writes a
+    `permit`. Rendering an empty list is the correct answer and the template
+    says why — a scaffolder that guessed a plausible list would hand every new
+    service a governance story its policy does not support."""
+    assert granted_tools("brand-new-agent") == ()
+
+    render(validate("brand-new-agent", "internal"), template_root=TEMPLATE, output_root=tmp_path)
+    tools = (tmp_path / "brand-new-agent" / "agentpave_brand_new_agent" / "tools.py").read_text(
+        encoding="utf-8"
+    )
+    assert "ALLOWED_TOOLS: tuple[str, ...] = ()" in tools
+    assert "default-deny" in tools
+    # And it must not have quietly inherited the sample service's grants.
+    assert "search_show" not in tools.split("ALLOWED_TOOLS")[1]
+
+
+def test_the_rendered_list_never_exceeds_what_policy_permits(tmp_path: Path) -> None:
+    """The direction that matters. A service claiming a tool it cannot call
+    fails at runtime; a service claiming one it *can* is merely redundant."""
+    render(validate("catalog-agent", "internal"), template_root=TEMPLATE, output_root=tmp_path)
+    module: dict[str, object] = {}
+    source = (tmp_path / "catalog-agent" / "agentpave_catalog_agent" / "tools.py").read_text(
+        encoding="utf-8"
+    )
+    # Evaluate just the assignment rather than importing, which would drag in
+    # boto3 and the whole client.
+    for line in source.splitlines():
+        if line.startswith("ALLOWED_TOOLS"):
+            exec(line, module)  # noqa: S102 — our own rendered literal
+            break
+
+    rendered = set(module["ALLOWED_TOOLS"])  # type: ignore[arg-type]
+    assert rendered <= set(granted_tools("catalog-agent"))
 
 
 # ── the render gate ───────────────────────────────────────────────────────

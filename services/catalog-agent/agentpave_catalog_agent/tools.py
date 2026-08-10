@@ -24,11 +24,19 @@ from botocore.awsrequest import AWSRequest
 
 MCP_URL_ENV = "AGENTPAVE_MCP_URL"
 
-# The tools this service is allowed to call, mirroring what the registry grants
-# its identity. Listed here so an accidental call to something ungranted fails
-# in this process with a readable message, rather than as a Cedar denial that
-# has to be read out of CloudWatch.
-ALLOWED_TOOLS = ("search_show", "get_schedule", "get_episodes")
+# Rendered from the registry, not hand-written. `pave new` asked Cedar which
+# tools it permits `catalog-agent` to invoke and wrote the answer here, so this
+# list and the policy cannot disagree at birth.
+#
+# It is a local pre-check, not the control. Cedar in the MCP server is the
+# control, and it will deny an ungranted call whatever this file says. The
+# value of the copy is that an ungranted call fails in this process with a
+# readable message instead of surfacing as a denial someone has to find in
+# CloudWatch.
+#
+# Editing this list grants nothing. To gain a tool, add a Cedar `permit` in
+# `platform/registry/agentpave_registry/policies/` and re-render.
+ALLOWED_TOOLS = ("get_episodes", "get_schedule", "search_show")
 
 
 class ToolError(RuntimeError):

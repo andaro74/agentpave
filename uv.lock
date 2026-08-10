@@ -131,12 +131,14 @@ version = "0.0.1"
 source = { editable = "pave" }
 dependencies = [
     { name = "agentpave-evalsvc" },
+    { name = "agentpave-registry" },
     { name = "jinja2" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "agentpave-evalsvc", editable = "platform/evalsvc" },
+    { name = "agentpave-registry", editable = "platform/registry" },
     { name = "jinja2", specifier = ">=3.1" },
 ]
 
