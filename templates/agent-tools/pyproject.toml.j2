@@ -4,23 +4,33 @@ version = "0.0.1"
 description = "AgentPave service {{ name }}, scaffolded from the agent-tools template"
 requires-python = ">=3.12"
 dependencies = [
+    # boto3 is provided by the Lambda runtime and must never be vendored:
+    # a second copy is dead weight in the asset and a version that can drift
+    # from the one AWS patches.
     "boto3>=1.35",
     "requests>=2.32",
-    "pydantic>=2.9",
-    "pyyaml>=6.0",
+    # Not an optional extra. It was one, and the effect was that nothing
+    # vendored it, `_tracer()` returned None in the deployed Lambda, and no
+    # span was ever emitted — while the deployed gate reported the service as
+    # traced, because Lambda's own X-Ray segments exist regardless (ADR-024).
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
 ]
+
+# pydantic and pyyaml were listed here and are not: the rendered service
+# imports neither. They were template cruft, and cruft in this list is not
+# harmless — every name here is a package the asset has to carry, and one
+# nobody vendors is a 502 waiting for its first deploy.
+#
+# Every runtime dependency here except boto3 must also be vendored by the
+# Makefile's SERVICE_DEPS. The Lambda runtime provides boto3 and botocore and
+# nothing else; a package declared here and vendored nowhere kills the function
+# at import, with a bare "Internal Server Error" and no line of our code run.
+# `test_pave_asset.py` cross-checks the two lists so that fails in `make check`.
 
 # There is deliberately no bedrock client here. This service reaches models
 # only through the gateway (ARCHITECTURE.md invariant 1), and its IAM role
 # holds zero `bedrock:*` — asserted in `cdk synth`, not trusted.
-
-[project.optional-dependencies]
-# OTEL is optional so the service starts without it; telemetry.py degrades to
-# a no-op rather than refusing to run.
-telemetry = [
-    "opentelemetry-api>=1.27",
-    "opentelemetry-sdk>=1.27",
-]
 
 # The package is `{{ package }}`, never `{{ name }}`. A directory whose name
 # matches a module shadows it as a namespace package the moment the repo root

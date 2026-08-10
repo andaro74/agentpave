@@ -45,6 +45,24 @@ diagrams: ## Render docs/diagrams/*.mermaid to SVG
 
 GATEWAY_BUILD := build/gateway
 MCP_BUILD     := build/mcp-tvmaze
+SERVICE_BUILD := build/catalog-agent
+
+# What the Lambda runtime already provides, and therefore what must never be
+# vendored: boto3 and botocore. Everything else a service imports has to be in
+# SERVICE_DEPS below, or the function dies at import with a bare "Internal
+# Server Error" and no line of our code ever runs.
+#
+# That is not hypothetical — it is what M04's first deployed walkthrough did.
+# The asset was plain source, `requests` was declared in the service's
+# pyproject and vendored by nothing, and three of five acts failed on it.
+# `test_pave_asset.py` now cross-checks this list against the rendered
+# service's imports and its declared dependencies, so the next one fails in
+# `make check` instead of after a deploy.
+#
+# OTEL is here rather than in an optional extra because ADR-024 needs it
+# present: a tracer that silently degrades to a no-op in the deployed function
+# is telemetry the gate cannot tell from telemetry that works.
+SERVICE_DEPS  := requests opentelemetry-api opentelemetry-sdk
 
 # CDK's PythonFunction bundles with Docker at synth time, which would put a
 # Docker daemon on the critical path of `make check`. Assets are built here
@@ -77,8 +95,12 @@ build-mcp: ## Vendor the MCP server's runtime deps into build/ — no Docker
 	cp -r platform/registry/agentpave_registry $(MCP_BUILD)/
 	find $(MCP_BUILD) -name '__pycache__' -type d -prune -exec rm -rf {} +
 
+.PHONY: build-service
+build-service: ## Vendor the scaffolded service's runtime deps into build/ — no Docker
+	$(call build_asset,$(SERVICE_BUILD),services/catalog-agent/agentpave_catalog_agent,$(SERVICE_DEPS))
+
 .PHONY: build
-build: build-gateway build-mcp ## Build every Lambda asset
+build: build-gateway build-mcp build-service ## Build every Lambda asset
 
 # ── Deployed gates (need AWS; cost real money) ───────────────────────────────
 
@@ -93,7 +115,12 @@ bootstrap: ## ⚠️ once per account+region — CDK toolkit stack
 
 .PHONY: deploy-dev
 deploy-dev: build ## ⚠️ creates real infrastructure
+	@# Every asset variable is set here, and forgetting one is silent: the CDK
+	@# app falls back to plain source, which synthesises, passes every IAM
+	@# assertion, deploys without complaint, and then 502s at import. That is
+	@# how M04's first walkthrough failed.
 	@$(WITH_ENV) AGENTPAVE_GATEWAY_ASSET=$(GATEWAY_BUILD) AGENTPAVE_MCP_ASSET=$(MCP_BUILD) \
+		AGENTPAVE_SERVICE_ASSET=$(SERVICE_BUILD) \
 		cdk deploy --all --require-approval broadening
 
 .PHONY: destroy-dev
@@ -142,8 +169,8 @@ walkthrough: ## M04 deployed gate: Act 1 end to end
 	@# service works — tool through MCP, model through the gateway, refused by
 	@# the platform rather than by the model's manners.
 	@#
-	@# It waits on X-Ray, so it takes a couple of minutes. That is ingestion
-	@# lag, not a hang.
+	@# It waits on CloudWatch log delivery, so it takes a minute or so. That is
+	@# ingestion lag, not a hang.
 	@$(WITH_ENV) uv run python -m agentpave_infra.walkthrough
 
 .PHONY: seed-baseline

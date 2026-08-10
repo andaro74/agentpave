@@ -164,3 +164,8 @@ class ServiceStack(Stack):
         # name, and a deployed gate that has to guess at an identifier is a
         # gate that silently checks the wrong resource.
         CfnOutput(self, "ServiceFunctionName", value=self.service_function.function_name)
+        # Spans are written to stdout and land here (ADR-024). The walkthrough
+        # reads this group to prove the service's *own* telemetry arrived —
+        # X-Ray summaries could not, because Lambda emits a segment for every
+        # invocation including one that died at import.
+        CfnOutput(self, "ServiceLogGroupName", value=log_group.log_group_name)

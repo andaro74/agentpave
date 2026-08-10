@@ -188,15 +188,50 @@ def test_a_run_with_no_blocked_row_fails():
 # ── traced ────────────────────────────────────────────────────────────────
 
 
-def test_traces_present_pass():
-    assert judge_traced([{"Id": "1-abc"}]).passed
+SPAN_RECORD = (
+    '{"name": "catalog-agent.answer", "context": {"trace_id": "0xabc"}, '
+    '"attributes": {"gen_ai.system": "aws.bedrock", "gen_ai.operation.name": "chat", '
+    '"agentpave.feature_id": "summarize"}}'
+)
 
 
-def test_no_traces_fails():
-    """Fail closed. Spans configured and none arriving is exactly the state
-    ADR-019's no-collector design is most likely to produce, so it cannot be
-    the state that passes."""
+def test_an_exported_span_passes():
+    assert judge_traced([SPAN_RECORD]).passed
+
+
+def test_no_span_records_fails():
+    """Fail closed. Spans configured and none arriving is precisely the state
+    the first implementation produced — OTEL was an optional extra that nothing
+    vendored — so it cannot be the state that passes."""
     assert not judge_traced([]).passed
+
+
+def test_lambdas_own_trace_output_does_not_count():
+    """The false pass this act was rewritten to remove.
+
+    `Tracing.ACTIVE` makes Lambda emit an X-Ray segment for every invocation,
+    including one that crashed at import before a line of our code ran. The
+    first version of this act read those summaries and went green on exactly
+    that run, while `answered`, `guarded` and `metered` all failed.
+    """
+    lambda_noise = [
+        "START RequestId: 7c1f Version: $LATEST",
+        "REPORT RequestId: 7c1f Duration: 812.44 ms XRAY TraceId: 1-68a-abc",
+        "END RequestId: 7c1f",
+    ]
+    result = judge_traced(lambda_noise)
+    assert not result.passed
+    assert "not this service's agent loop" in result.detail
+
+
+def test_a_span_without_the_conventional_attribute_names_fails():
+    """`llm.model` is not `gen_ai.request.model`. A dashboard built on the
+    convention shows nothing when they differ, and nothing else anywhere would
+    report a problem — so the exact strings are what get checked."""
+    renamed = SPAN_RECORD.replace("gen_ai.system", "llm.system")
+    result = judge_traced([renamed])
+    assert not result.passed
+    assert "gen_ai.system" in result.detail
 
 
 # ── the report ────────────────────────────────────────────────────────────

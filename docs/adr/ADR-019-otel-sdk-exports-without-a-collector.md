@@ -1,6 +1,6 @@
 # ADR-019: Scaffolded services export OTEL spans from the function, with no collector and no ADOT layer
 
-**Status:** Accepted
+**Status:** Superseded by ADR-024
 **Date:** 2026-08-10
 **Milestone:** M04
 

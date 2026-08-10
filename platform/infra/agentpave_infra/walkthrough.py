@@ -58,6 +58,11 @@ GUARDED_QUESTION = (
 # not on this list, and that is ARCHITECTURE.md invariant 5.
 REFUSAL_STAGES = ("guardrail", "screening")
 
+# The exact conventional strings, not a prefix match. `llm.model` is not
+# `gen_ai.request.model`, and a dashboard built on the convention shows nothing
+# when they differ — a failure with no error and no red test anywhere else.
+REQUIRED_SPAN_ATTRIBUTES = ("gen_ai.system", "gen_ai.operation.name")
+
 
 @dataclass(frozen=True)
 class Result:
@@ -197,23 +202,52 @@ def judge_metered(rows: list[dict[str, Any]]) -> Result:
     )
 
 
-def judge_traced(summaries: list[dict[str, Any]]) -> Result:
-    """Spans reached X-Ray for this run.
+def judge_traced(log_events: list[str]) -> Result:
+    """The service's *own* spans arrived, with the conventional attribute names.
 
-    Deliberately weak, and labelled as such rather than dressed up: this proves
-    the service is traced, not that one trace spans all three hops. ADR-019
-    propagates `traceparent` by hand with no collector, and asserting linkage
-    from here would be asserting X-Ray's segment-merging behaviour rather than
-    the platform's.
+    This act was rewritten after it passed on a run where the function crashed
+    at import. It read X-Ray trace summaries, and Lambda emits an X-Ray segment
+    for every invocation whether or not a line of our code ran — so it was
+    reporting the runtime's instrumentation as though it were the platform's.
+
+    Worse, there was nothing for it to find: OTEL shipped as an optional extra
+    that nothing vendored, so `_tracer()` returned None and no span was ever
+    created. A green act, no telemetry, and no way to tell from the outside.
+
+    So it now reads what only our code could have written: spans exported to
+    stdout (ADR-024), carrying the span name and the GenAI semconv attributes.
+    An `llm.model` attribute is not `gen_ai.request.model`, and the whole point
+    of the convention is that a dashboard can rely on the exact string — so the
+    exact string is what gets checked.
     """
-    if not summaries:
+    if not log_events:
         return Result(
             "traced",
             False,
-            "no X-Ray traces for the service function in this run's window — "
-            "spans are configured but nothing arrived",
+            "no span records in the service's log group for this run — the tracer "
+            "degraded to a no-op, which is exactly what it does when the OTEL "
+            "packages are missing from the asset",
         )
-    return Result("traced", True, f"{len(summaries)} trace(s) recorded for this run")
+
+    named = [event for event in log_events if f"{SERVICE_ID}.answer" in event]
+    if not named:
+        return Result(
+            "traced",
+            False,
+            f"log output carried no {SERVICE_ID}.answer span — something wrote spans, "
+            "but not this service's agent loop",
+        )
+
+    missing = [attribute for attribute in REQUIRED_SPAN_ATTRIBUTES if attribute not in named[0]]
+    if missing:
+        return Result(
+            "traced",
+            False,
+            f"the span is missing GenAI semconv attributes {', '.join(missing)} — a "
+            "dashboard built on the convention would silently show nothing",
+        )
+
+    return Result("traced", True, f"{len(named)} span(s) exported with GenAI semconv attributes")
 
 
 def report(results: list[Result]) -> tuple[str, bool]:
@@ -285,19 +319,25 @@ def _metering_rows(table_name: str, since: str) -> list[dict[str, Any]]:
     return rows
 
 
-def _traces(function_name: str, start, end) -> list[dict[str, Any]]:
+def _span_records(log_group: str, started_ms: int) -> list[str]:
+    """Log lines from this run that look like an exported span.
+
+    Filtered by the span name rather than fetched wholesale: the log group also
+    carries Lambda's own START/END/REPORT lines and anything the service
+    printed, and a match on "there was output" would pass on a stack trace.
+    """
     import boto3
 
-    client = boto3.client("xray")
-    paginator = client.get_paginator("get_trace_summaries")
-    summaries: list[dict[str, Any]] = []
+    client = boto3.client("logs")
+    paginator = client.get_paginator("filter_log_events")
+    events: list[str] = []
     for page in paginator.paginate(
-        StartTime=start,
-        EndTime=end,
-        FilterExpression=f'service(id(name: "{function_name}", type: "AWS::Lambda::Function"))',
+        logGroupName=log_group,
+        startTime=started_ms,
+        filterPattern=f'"{SERVICE_ID}.answer"',
     ):
-        summaries.extend(page.get("TraceSummaries", []))
-    return summaries
+        events.extend(event.get("message", "") for event in page.get("events", []))
+    return events
 
 
 def main(
@@ -328,28 +368,28 @@ def main(
     print("  Q: the same question, carrying an injection")
     results.append(judge_guarded(*_ask(url, GUARDED_QUESTION)))
 
-    # DynamoDB is strongly consistent for a query, but the gateway writes its
-    # row before returning, so nothing is waited on here. X-Ray is different:
-    # trace ingestion is asynchronous and a few seconds behind the invocation,
-    # so a failure to wait would fail an act that is actually passing.
+    # DynamoDB is strongly consistent for a query and the gateway writes its
+    # row before returning, so nothing is waited on here. CloudWatch is
+    # different: log delivery is asynchronous and runs seconds behind the
+    # invocation, so not waiting would fail an act that is actually passing.
     results.append(judge_metered(_metering_rows(gateway_outputs["MeteringTableName"], since)))
 
-    function_name = service_outputs.get("ServiceFunctionName", "")
-    if function_name:
-        print("\n  waiting for X-Ray ingestion…")
-        summaries: list[dict[str, Any]] = []
-        for _ in range(12):
-            time.sleep(10)
-            summaries = _traces(function_name, started, datetime.now(UTC))
-            if summaries:
+    log_group = service_outputs.get("ServiceLogGroupName", "")
+    if log_group:
+        print("\n  waiting for the spans to reach CloudWatch…")
+        events: list[str] = []
+        for _ in range(10):
+            time.sleep(6)
+            events = _span_records(log_group, int(started.timestamp() * 1000))
+            if events:
                 break
-        results.append(judge_traced(summaries))
+        results.append(judge_traced(events))
     else:
         results.append(
             Result(
                 "traced",
                 False,
-                "the service stack publishes no ServiceFunctionName output, so this act "
+                "the service stack publishes no ServiceLogGroupName output, so this act "
                 "cannot be evaluated — a gate that cannot check fails (standing rule 5)",
             )
         )
