@@ -11,6 +11,7 @@ Scaffolded by `pave new {{ name }} --template agent-tools --classification {{ cl
 | Thin agent loop | `{{ package }}/agent.py` | One tool, one turn, no in-process state (ADR-018) |
 | OTEL spans | `{{ package }}/telemetry.py` | GenAI semconv, propagated across all three hops (ADR-019) |
 | Eval dataset | `eval/golden.yaml` | The gate needs something to grade |
+| Adversarial probes | `eval/adversarial.yaml` | Every probe names a control that can actually fire (ADR-015) |
 | Quality gate | `gate.yml` | Fails closed; bites from M05 |
 
 ## The one mistake that fails silently
@@ -25,9 +26,32 @@ passing test run reveals it (ADR-013).
 ## Local
 
 ```
-make check      # from the repo root: lint, tests, synth
+make check                                          # repo root: lint, tests, synth
+pave eval --dataset services/{{ name }}/eval --dry-run   # the plan, no model calls
+pave eval --dataset services/{{ name }}/eval             # needs AWS; costs money
 ```
 
 `eval/golden.yaml` seeds five cases over recorded fixtures. Add to it before
 you add capabilities — a service whose dataset lags its features has a gate
 that grades a subset and reports a whole.
+
+## Turning the judge on
+
+Every seed case is `deterministic`. That is deliberate, not an oversight.
+
+A judged case needs a **calibrated** judge, and calibration needs answers a
+person labelled by hand. `{{ name }}` has never run, so no such answers exist
+and none can be invented — a "hand-labelled" sample nobody labelled is a number
+the gate would then trust to grade real work.
+
+To turn it on, in this order:
+
+1. `pave eval --dataset services/{{ name }}/eval` and keep the answers.
+2. Label ten of them in `eval/calibration.yaml` — `human_pass` plus a `note`
+   saying *why*. Aim for a rough balance of passes and failures; ten samples
+   you all agree with measure nothing.
+3. Switch the cases you want judged to `grading: judged`.
+
+The loader refuses a judged case when there are no calibration samples, so this
+cannot be left half-done. Agreement below 80% fails the run rather than
+downgrading it.

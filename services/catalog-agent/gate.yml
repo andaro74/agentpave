@@ -1,0 +1,71 @@
+# The quality gate for catalog-agent.
+#
+# This file is **data, not a workflow**. It declares the ladder; M05 writes the
+# CI job that reads it and posts the score diff. Keeping the ladder as data is
+# what lets one workflow serve every scaffolded service, and what lets a test
+# assert the ladder's shape without parsing GitHub Actions YAML.
+#
+# The numbering skips L3 and L4. It is inherited from the ladder in
+# ARCHITECTURE.md §3 and the gaps are deliberate: renumbering this platform's
+# four levels 0-3 would make its scorecards incomparable with the ladder they
+# came from, to save nothing.
+
+service: catalog-agent
+classification: internal
+
+# Fail closed (CLAUDE.md standing rule 5). A level that errors is a failed
+# level, never a skipped one.
+#
+# There is deliberately no `continue_on_error` key, and adding one would undo
+# the entire point of this file in a single line. If a level is too flaky to
+# block, the fix is the level, not the gate: delete it and record why in an
+# ADR, so the loss of coverage is visible instead of silently tolerated on
+# every run.
+fail_closed: true
+
+levels:
+  - id: L0
+    name: unit
+    blocking: true
+    needs_aws: false
+    command: pytest tests -q
+    why: >-
+      catalog-agent's own logic. Fast, hermetic, and the only level that runs on
+      every keystroke — so it is the level worth keeping honest.
+
+  - id: L1
+    name: contract
+    blocking: true
+    needs_aws: false
+    command: pytest platform/mcp-tvmaze -q
+    why: >-
+      the tools catalog-agent calls still answer their published schemas. This
+      level belongs to the service even though the code is the platform's: a
+      schema change upstream breaks this service's answers, and finding out
+      from an eval failure means paying a model to discover a broken contract.
+
+  - id: L2
+    name: eval
+    blocking: true
+    needs_aws: true
+    command: pave eval --dataset services/catalog-agent/eval --diff
+    why: >-
+      the golden set, graded, against the last recorded baseline. `--diff` is
+      not optional decoration: an absolute pass count answers "is it broken",
+      and only the diff answers "did this change make it worse", which is the
+      question a pull request is actually asking.
+
+  - id: L5
+    name: adversarial
+    blocking: true
+    needs_aws: true
+    command: pave eval --dataset services/catalog-agent/eval --adversarial-only
+    why: >-
+      the platform's controls, not the model's manners. Passes only on
+      "guardrail blocked, or policy denied and logged" — see
+      ARCHITECTURE.md invariant 5, enforced in `adversarial.py`, not here.
+
+# Budget ceilings are per-case in `eval/golden.yaml` rather than global here.
+# One global ceiling is either loose enough to miss a regression on the cheap
+# cases or tight enough to fail enrichment, which legitimately costs more than
+# a one-line airing answer.

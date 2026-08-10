@@ -1,0 +1,90 @@
+# Seed golden dataset for catalog-agent — five cases over recorded fixtures.
+#
+# This is a seed, not a suite. Five cases prove the gate runs and grades
+# something; they do not prove catalog-agent works. Grow it as you add
+# capabilities — a service whose dataset lags its features has a gate that
+# grades a subset and reports a whole.
+#
+# Every expectation is grounded in a committed fixture. Nothing here asserts a
+# fact the fixtures do not contain, which is the point: a case expecting
+# something only the model's training data knows is testing recall, not
+# grounding, and would go green against a hallucination.
+#
+# ── why every seed case is `deterministic` ───────────────────────────────────
+#
+# A judged case needs a *calibrated* judge, and calibration needs answers a
+# person has labelled by hand. catalog-agent has never run, so no such answers
+# exist — and they cannot be invented, because a "hand-labelled" sample nobody
+# labelled is a fabrication the gate would then trust to grade real work.
+#
+# So the seed grades on what needs no judge: substrings, budgets, and the
+# enrichment schema. That is a smaller gate, honestly sized, rather than a
+# larger one resting on a number nobody measured.
+#
+# To turn the judge on: run the suite, take the answers it produced, label them
+# in `eval/calibration.yaml`, then switch cases to `grading: judged`. The
+# loader refuses a judged case when there are no calibration samples, so this
+# cannot be half-done by accident.
+#
+# ── case ids carry the service name ──────────────────────────────────────────
+#
+# `catalog-agent-airing-channel`, not `airing-channel`. Case ids are the join key
+# for the baseline diff and for M05's dashboards; two services each shipping a
+# case called `airing-channel` produce a trend line that silently averages two
+# different questions.
+
+cases:
+  # ── airing ─────────────────────────────────────────────────────────────────
+  - case_id: catalog-agent-airing-channel
+    capability: airing
+    grading: deterministic
+    prompt: What channel or network airs Severance?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["Apple TV"]
+    # Hallucination bait. TVMaze records `network: null` and
+    # `webChannel: Apple TV` for this show, and a model answering from memory
+    # reliably reaches for a broadcast network instead. This is the cheapest
+    # grounding check in the dataset and the one most likely to catch a
+    # regression that swapped the tool result for nothing.
+    must_not_contain: ["HBO", "Netflix", "AMC"]
+
+  - case_id: catalog-agent-airing-latest-episode
+    capability: airing
+    grading: deterministic
+    prompt: What date did the latest episode of Severance air?
+    fixture: shows_44933_episodes.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    # ISO form, because the serving system prompt asks for it. An expectation
+    # of "March 21, 2025" would be testing phrasing, not the fact.
+    must_contain: ["2025-03-21"]
+
+  # ── running ────────────────────────────────────────────────────────────────
+  - case_id: catalog-agent-running-status
+    capability: running
+    grading: deterministic
+    prompt: Is Severance still running, and what is its status?
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_contain: ["Running"]
+
+  # ── summarize ──────────────────────────────────────────────────────────────
+  - case_id: catalog-agent-summarize-genres
+    capability: summarize
+    grading: deterministic
+    prompt: Summarize Severance in two sentences, and list its genres.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 20000, cost_usd: 0.02 }
+    must_contain: ["Drama", "Science-Fiction", "Mystery"]
+
+  # ── enrichment ─────────────────────────────────────────────────────────────
+  # Enrichment is deterministic by rule, not by choice here: it returns a
+  # schema, and paying a judge to form an opinion about what `json.loads` has
+  # already proved is waste. The loader enforces that.
+  - case_id: catalog-agent-enrichment-record
+    capability: enrichment
+    grading: deterministic
+    prompt: Return the JSON metadata record for Severance.
+    fixture: search_shows__q-severance.json
+    budget: { latency_ms: 25000, cost_usd: 0.03 }
+    must_contain: ["Severance", "Apple TV", "Running"]
