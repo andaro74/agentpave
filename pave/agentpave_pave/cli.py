@@ -49,9 +49,40 @@ def _not_yet(verb: str) -> int:
     return 1
 
 
+class _NoAbbrev(argparse.ArgumentParser):
+    """A subparser that will not accept a flag by prefix.
+
+    `add_subparsers(parser_class=...)` is the only way to reach the subparsers'
+    constructor, and the constructor is the only place `allow_abbrev` can be
+    set. See the note in `_build_parser`.
+    """
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        kwargs["allow_abbrev"] = False
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="pave", description="The AgentPave platform CLI")
-    sub = parser.add_subparsers(dest="verb", required=True)
+    parser = argparse.ArgumentParser(
+        prog="pave",
+        description="The AgentPave platform CLI",
+        # Prefix abbreviation off. argparse accepts any unambiguous prefix by
+        # default, so `--adversarial` silently means `--adversarial-only` —
+        # which turned a mutation test green that should have been red: a
+        # `gate.yml` naming a flag that does not exist still parsed.
+        #
+        # Worse than a weak test, it is a delayed break. Every scaffolded
+        # service writes these commands into its `gate.yml`, and an abbreviation
+        # that resolves today becomes ambiguous the day a second flag shares its
+        # prefix — failing in someone else's CI, months from the commit that
+        # caused it.
+        allow_abbrev=False,
+    )
+    # Subparsers do not inherit it. Setting it only on the root parser looks
+    # like it worked and does nothing, because every flag `pave` actually has
+    # belongs to a subcommand — the mutation stayed green through one round of
+    # "fixing" it that way.
+    sub = parser.add_subparsers(dest="verb", required=True, parser_class=_NoAbbrev)
 
     evaluate = sub.add_parser("eval", help="run the golden-set evaluation")
     evaluate.add_argument(
@@ -74,6 +105,16 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="run only the adversarial mini-suite",
     )
+    evaluate.add_argument(
+        "--dataset",
+        default=None,
+        metavar="DIR",
+        help=(
+            "grade a service's own dataset directory (default: the platform's). "
+            "This is the flag a scaffolded service's gate.yml uses — without it "
+            "the seed dataset every service ships would be unrunnable decoration."
+        ),
+    )
 
     new = sub.add_parser("new", help="scaffold a governed service from a template")
     new.add_argument("name", help="kebab-case; becomes the directory, package and stack name")
@@ -95,7 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _run_eval(args: argparse.Namespace) -> int:
     try:
-        dataset = load_dataset()
+        dataset = load_dataset(Path(args.dataset) if args.dataset else None)
     except DatasetError as exc:
         print(f"dataset is not usable: {exc}", file=sys.stderr)
         return 1

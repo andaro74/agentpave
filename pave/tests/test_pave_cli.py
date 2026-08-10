@@ -105,6 +105,25 @@ def test_no_verb_is_rejected():
     assert exc.value.code != 0
 
 
+@pytest.mark.parametrize("flag", ["--adversarial", "--data", "--dry"])
+def test_a_flag_given_by_prefix_is_rejected(flag):
+    """argparse accepts unambiguous prefixes by default; this CLI does not.
+
+    Every scaffolded service writes `pave eval ...` into its `gate.yml`, and an
+    abbreviation that resolves today becomes ambiguous the day a second flag
+    shares its prefix — breaking in someone else's CI, long after the commit
+    that caused it. It also made a mutation survive: a `gate.yml` naming
+    `--adversarial`, a flag that does not exist, parsed cleanly.
+
+    `allow_abbrev=False` has to be set on the *subparsers*, which do not
+    inherit it from the root. Setting it only at the root passes review and
+    changes nothing.
+    """
+    with pytest.raises(SystemExit) as exc:
+        main(["eval", flag])
+    assert exc.value.code != 0
+
+
 def test_not_yet_milestones_match_the_roadmap():
     """The message and the roadmap must not drift apart.
 
