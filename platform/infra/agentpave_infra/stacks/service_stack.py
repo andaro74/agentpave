@@ -159,3 +159,8 @@ class ServiceStack(Stack):
 
         CfnOutput(self, "ServiceUrl", value=self.function_url.url)
         CfnOutput(self, "ServiceRoleArn", value=self.service_role.role_arn)
+        # Published so `make walkthrough` can ask X-Ray for this function's
+        # traces by name. The generated name is not derivable from the stack
+        # name, and a deployed gate that has to guess at an identifier is a
+        # gate that silently checks the wrong resource.
+        CfnOutput(self, "ServiceFunctionName", value=self.service_function.function_name)

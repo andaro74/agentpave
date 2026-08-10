@@ -136,7 +136,15 @@ eval-adversarial: ## M03 deployed gate: passes on "blocked or denied+logged", ne
 
 .PHONY: walkthrough
 walkthrough: ## M04 deployed gate: Act 1 end to end
-	$(call not_yet,walkthrough,M04)
+	@# Act 1 is scaffold → deploy → a traced, metered, guarded answer. The
+	@# scaffold half is already graded hermetically by the render gate and the
+	@# drift test; what only a deployed run can show is that the rendered
+	@# service works — tool through MCP, model through the gateway, refused by
+	@# the platform rather than by the model's manners.
+	@#
+	@# It waits on X-Ray, so it takes a couple of minutes. That is ingestion
+	@# lag, not a hang.
+	@$(WITH_ENV) uv run python -m agentpave_infra.walkthrough
 
 .PHONY: seed-baseline
 seed-baseline: ## M05: write the current eval scores as the CI gate baseline

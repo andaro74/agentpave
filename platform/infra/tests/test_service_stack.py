@@ -182,3 +182,16 @@ def test_stack_synthesises_exactly_one_role_and_one_function(template: Template)
     # CDK helper construct. One service, one role.
     template.resource_count_is("AWS::IAM::Role", 1)
     template.resource_count_is("AWS::Lambda::Function", 1)
+
+
+def test_the_stack_publishes_what_the_walkthrough_needs(template: Template) -> None:
+    """`make walkthrough` resolves the service by stack output, never by guess.
+
+    The generated function name is not derivable from the stack name, so a
+    deployed gate without this output would either guess an identifier or skip
+    the traced act — and a gate that cannot check has to fail, not skip
+    (standing rule 5). Asserted here so removing the output turns `make check`
+    red rather than surfacing as a failed act at the end of a deploy.
+    """
+    outputs = template.to_json().get("Outputs", {})
+    assert {"ServiceUrl", "ServiceRoleArn", "ServiceFunctionName"} <= set(outputs)
