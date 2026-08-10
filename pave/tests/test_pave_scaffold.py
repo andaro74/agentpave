@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from agentpave_pave.cli import TEMPLATE_ROOT
+from agentpave_pave.cli import REPO_ROOT, TEMPLATE_ROOT
 from agentpave_pave.scaffold import ScaffoldError, granted_tools, render, validate
 
 TEMPLATE = TEMPLATE_ROOT / "agent-tools"
@@ -188,6 +188,53 @@ def test_the_rendered_list_never_exceeds_what_policy_permits(tmp_path: Path) -> 
 
     rendered = set(module["ALLOWED_TOOLS"])  # type: ignore[arg-type]
     assert rendered <= set(granted_tools("catalog-agent"))
+
+
+# ── the committed sample has not drifted from the template ────────────────
+
+
+def test_the_sample_service_is_what_the_template_renders_today(tmp_path: Path):
+    """`services/catalog-agent` is a render, not a fork.
+
+    It is a committed workspace member so `make check` runs the tests it was
+    scaffolded with — which is the only thing that grades the golden path
+    rather than assuming it (ADR-020). That only holds while the two agree.
+    Without this test, editing the template leaves the sample stale and every
+    assertion made against the sample is an assertion about a service the
+    scaffolder no longer produces.
+
+    The remedy when this goes red is to re-render, never to hand-edit the
+    sample: a fix applied to the copy is a fix no future service receives.
+    """
+    committed = REPO_ROOT / "services" / "catalog-agent"
+    if not committed.is_dir():  # pragma: no cover - the sample is committed
+        pytest.skip("the sample service is not present in this checkout")
+
+    render(validate("catalog-agent", "internal"), template_root=TEMPLATE, output_root=tmp_path)
+    fresh = tmp_path / "catalog-agent"
+
+    def tree(root: Path) -> dict[str, str]:
+        return {
+            str(path.relative_to(root)).replace("\\", "/"): path.read_text(encoding="utf-8")
+            for path in sorted(root.rglob("*"))
+            # Build and cache artefacts are not part of the render, and a
+            # developer who has run the tests or the linter once would
+            # otherwise fail this — several of those artefacts are binary, so
+            # they do not merely differ, they cannot be read as text at all.
+            if path.is_file()
+            and "__pycache__" not in path.parts
+            and not any(part.startswith(".") for part in path.parts)
+            and not any(part.endswith(".egg-info") for part in path.parts)
+        }
+
+    rendered, on_disk = tree(fresh), tree(committed)
+
+    assert sorted(on_disk) == sorted(rendered), (
+        "the committed sample and a fresh render disagree on which files exist — "
+        "re-render it with `pave new`, do not hand-edit the copy"
+    )
+    drifted = sorted(name for name in rendered if rendered[name] != on_disk[name])
+    assert not drifted, f"the committed sample has drifted from the template: {', '.join(drifted)}"
 
 
 # ── the render gate ───────────────────────────────────────────────────────
