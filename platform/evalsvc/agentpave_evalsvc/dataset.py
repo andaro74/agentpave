@@ -99,7 +99,7 @@ def load_dataset(
         #
         # This is not a hole: a dataset with no calibration may not contain a
         # judged case, checked below. Absent calibration buys a smaller gate,
-        # not a laxer one.
+        # not a laxer one (ADR-022).
         calibration_file = dataset_dir / "calibration.yaml"
         calibration = (
             tuple(

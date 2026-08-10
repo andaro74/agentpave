@@ -198,7 +198,7 @@ def test_the_sample_service_is_what_the_template_renders_today(tmp_path: Path):
 
     It is a committed workspace member so `make check` runs the tests it was
     scaffolded with — which is the only thing that grades the golden path
-    rather than assuming it (ADR-020). That only holds while the two agree.
+    rather than assuming it (ADR-021). That only holds while the two agree.
     Without this test, editing the template leaves the sample stale and every
     assertion made against the sample is an assertion about a service the
     scaffolder no longer produces.
