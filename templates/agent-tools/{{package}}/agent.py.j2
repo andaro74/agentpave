@@ -18,6 +18,7 @@ Two properties this file exists to hold:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from . import telemetry
@@ -53,6 +54,45 @@ class Answer:
     tool: str
 
 
+def search_subject(question: str) -> str:
+    """The search term inside a question — "Severance", not the whole sentence.
+
+    `search_show` takes a query, not a sentence. Passing the question through
+    verbatim asks the catalogue for *"What network airs Severance?"*, which
+    against recorded fixtures misses every time and against live TVMaze
+    depends on how forgiving its fuzzy match happens to be that day.
+
+    The rule: take the capitalised runs, ignoring the first word, since English
+    capitalises a sentence's opening regardless of what it is. Prefer the
+    longest run — multi-word titles are the reason — and on a tie prefer the
+    last, because a question mentions its subject at the end far more often
+    than at the start ("Return the JSON metadata record for Severance").
+
+    This is a heuristic and it is wrong for some questions (ADR-023). It has no
+    opinion about lowercase titles, and it can be fooled by any other proper
+    noun in the sentence. The fallback is the question itself, so a miss
+    degrades to today's behaviour rather than to an exception.
+    """
+    words = re.findall(r"[^\s]+", question.strip())
+    if len(words) < 2:
+        return question.strip().strip("?.!,")
+
+    best: list[str] = []
+    current: list[str] = []
+    # `words[0]` is skipped deliberately, not by an off-by-one.
+    for word in words[1:]:
+        bare = word.strip("?.!,;:\"'()")
+        if bare[:1].isupper():
+            current.append(bare)
+            # `>=` rather than `>`: a later run of equal length wins.
+            if len(current) >= len(best):
+                best = list(current)
+        else:
+            current = []
+
+    return " ".join(best) if best else question.strip().strip("?.!,")
+
+
 def _grounding(question: str) -> tuple[str, str]:
     """Fetch the data this question should be answered from.
 
@@ -60,7 +100,7 @@ def _grounding(question: str) -> tuple[str, str]:
     shape is a tuple so that adding a second tool is a change here and nowhere
     else.
     """
-    return "search_show", call_tool("search_show", {"query": question})
+    return "search_show", call_tool("search_show", {"query": search_subject(question)})
 
 
 def answer(question: str, *, feature_id: str = "summarize") -> Answer:
