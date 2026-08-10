@@ -13,6 +13,7 @@ import aws_cdk as cdk
 from agentpave_infra.stacks.eval_stack import EvalStack
 from agentpave_infra.stacks.gateway_stack import GatewayStack
 from agentpave_infra.stacks.mcp_tvmaze_stack import McpTvmazeStack
+from agentpave_infra.stacks.service_stack import ServiceStack
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # also carry the runtime dependencies (ADR-007).
 DEFAULT_GATEWAY_ASSET = REPO_ROOT / "platform" / "gateway"
 DEFAULT_MCP_ASSET = REPO_ROOT / "platform" / "mcp-tvmaze"
+DEFAULT_SERVICE_ASSET = REPO_ROOT / "services" / "catalog-agent"
 
 STAGE = os.environ.get("AGENTPAVE_STAGE", "dev")
 
@@ -49,6 +51,21 @@ EvalStack(
     app,
     f"AgentPave-Eval-{STAGE}",
     description="AgentPave eval service: baseline score store",
+)
+
+# The scaffolded sample service. Its URLs are wired from the other stacks'
+# outputs at deploy time rather than imported as cross-stack references: a
+# hard reference would make the gateway undeployable while a service that
+# depends on it exists, and M04's walkthrough tears services down routinely.
+ServiceStack(
+    app,
+    f"AgentPave-Service-CatalogAgent-{STAGE}",
+    asset_path=os.environ.get("AGENTPAVE_SERVICE_ASSET", str(DEFAULT_SERVICE_ASSET)),
+    service_name="catalog-agent",
+    package="agentpave_catalog_agent",
+    gateway_url=os.environ.get("AGENTPAVE_GATEWAY_URL", "https://unset.invalid/"),
+    mcp_url=os.environ.get("AGENTPAVE_MCP_URL", "https://unset.invalid/mcp"),
+    description="AgentPave catalog-agent: the scaffolded sample service",
 )
 
 app.synth()
