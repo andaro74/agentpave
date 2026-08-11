@@ -245,6 +245,12 @@ def test_serving_instructions_forbid_the_padding_the_judge_penalised():
     # And the ISO date instruction that makes `must_contain: ["2025-03-21"]`
     # an assertion about grounding rather than about phrasing.
     assert "yyyy-mm-dd" in lowered
+    # The same clause carries `airing-schedule-fox-friends-first`, which
+    # asserts the fixture's own airtime string `"05:00"`. Two golden cases now
+    # depend on values being reproduced as the data spells them, so losing this
+    # half of the sentence costs eval points in CI for a formatting reason —
+    # exactly the false signal a score diff must not carry. Red here instead.
+    assert "exactly as they appear" in lowered
 
 
 def test_the_guarded_span_carries_the_data_and_none_of_the_instructions():
@@ -340,7 +346,7 @@ def test_an_injected_probe_keeps_its_payload_inside_the_guarded_span():
 
 def test_plan_describes_the_shipped_dataset_without_calling_anything():
     rendered = plan(load_dataset())
-    assert "30" in rendered
+    assert "golden cases:  31" in rendered
     assert "adversarial:   10" in rendered
     assert "dry run" in rendered
 

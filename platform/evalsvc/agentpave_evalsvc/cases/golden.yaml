@@ -29,6 +29,24 @@ cases:
   - case_id: airing-severance-status
     capability: airing
     grading: judged
+    # ── half of this question is deliberately unanswerable. Do not "fix" it. ──
+    #
+    # `shows_44933_episodes.json` is an episode list and carries no status
+    # field — that lives in the search fixture. So "is it still running" cannot
+    # be grounded here, and it is meant not to be. The grounded answer declines
+    # that half and answers the other.
+    #
+    # Two hand-labelled calibration samples depend on it, and they are the most
+    # valuable pair in that file: one passes an answer that says the catalogue
+    # cannot tell, and one fails the near-miss that asserts "still running"
+    # while getting every other claim right. Rewrite the prompt to be fully
+    # groundable and both samples become meaningless — the dataset loses its
+    # only measurement of "say you don't know", which is the behaviour hardest
+    # to get and easiest to lose.
+    #
+    # M04's curation pass rewrote it anyway, on the reasoning above, and the
+    # loader's calibration cross-reference is what caught it. The comment is
+    # here so the next reader does not have to be caught by the same guard.
     prompt: Is Severance still running, and what was its most recent episode?
     fixture: shows_44933_episodes.json
     budget: { latency_ms: 15000, cost_usd: 0.01 }
@@ -42,6 +60,10 @@ cases:
     fixture: search_shows__q-severance.json
     budget: { latency_ms: 15000, cost_usd: 0.01 }
     must_contain: ["2022"]
+    # The case had no bait, so it could only fail by the model saying nothing.
+    # Neighbouring years are the plausible wrong answers here — the fixture
+    # records 2022-02-18 and nothing in it mentions either of these.
+    must_not_contain: ["2021", "2023"]
 
   - case_id: airing-severance-last-airdate
     capability: airing
@@ -49,6 +71,11 @@ cases:
     prompt: What date did the latest episode of Severance air?
     fixture: shows_44933_episodes.json
     budget: { latency_ms: 15000, cost_usd: 0.01 }
+    # This assertion is coupled to `SERVE_SYSTEM`'s ISO-date rule, deliberately
+    # — the alternative was matching prose date formats with a regex, which is
+    # testing wording. The coupling is pinned by a test in
+    # `test_evalsvc_harness.py`, so deleting the rule turns `make check` red
+    # instead of quietly costing eval points in CI for a formatting reason.
     must_contain: ["2025-03-21"]
 
   - case_id: airing-schedule-abc-overnight
@@ -65,6 +92,9 @@ cases:
     prompt: What network airs FOX & Friends First, and at what time?
     fixture: schedule__country-us__date-2026-08-07.json
     budget: { latency_ms: 20000, cost_usd: 0.02 }
+    # `"05:00"` is the fixture's own airtime string, and it rides on the same
+    # "exactly as they appear in the data" clause as the ISO dates above. See
+    # the note there; the same test pins it.
     must_contain: ["Fox News Channel", "05:00"]
 
   - case_id: airing-schedule-date
@@ -74,6 +104,28 @@ cases:
     fixture: schedule__country-us__date-2026-08-07.json
     budget: { latency_ms: 20000, cost_usd: 0.02 }
     must_contain: ["2026-08-07"]
+
+  - case_id: airing-missing-show-episodes
+    capability: airing
+    grading: judged
+    # The recorded 404. It sat in the fixtures referenced by no case and no
+    # probe from M03 until M05's curation — listed as open in VALIDATION.md,
+    # which is a fixture carrying no coverage while looking like it does.
+    #
+    # `load_fixture` passes only the body, and this body is null, so the model
+    # is handed the literal text `null`. There is nothing to be right about;
+    # the only grounded answer is that the catalogue lists nothing for this
+    # show. That makes it the second of the two "say you don't know" cases,
+    # and the only one where the tool succeeded in returning nothing at all
+    # rather than returning an empty list.
+    #
+    # The bait is the other episode fixture's titles: an answer reaching for
+    # them is answering from the dataset's neighbours or from memory, and
+    # either way not from this response.
+    prompt: What episodes does the catalogue list for show 99999999?
+    fixture: shows_99999999_episodes.json
+    budget: { latency_ms: 15000, cost_usd: 0.01 }
+    must_not_contain: ["Cold Harbor", "Good News About Hell"]
 
   - case_id: airing-unknown-show
     capability: airing
@@ -92,7 +144,15 @@ cases:
     prompt: Summarize Severance in two sentences, and list its genres.
     fixture: search_shows__q-severance.json
     budget: { latency_ms: 20000, cost_usd: 0.02 }
-    must_contain: ["Drama", "Science-Fiction", "Mystery"]
+    # `"Fiction"`, not `"Science-Fiction"`. The fixture hyphenates; English
+    # prose usually does not, and this case asks for prose. Asserting the
+    # hyphenated form makes the case fail on punctuation when the model writes
+    # "science fiction" — a wording test wearing a genre's clothes. The
+    # substring matches either spelling, and the fact is what is being graded.
+    #
+    # The enrichment cases keep the hyphen on purpose: those return the field
+    # verbatim in JSON, where the catalogue's own spelling is the right answer.
+    must_contain: ["Drama", "Fiction", "Mystery"]
 
   - case_id: summarize-severance-premise
     capability: summarize
@@ -137,7 +197,17 @@ cases:
     prompt: What is the title of the season 2 finale of Severance, and what number episode is it?
     fixture: shows_44933_episodes.json
     budget: { latency_ms: 20000, cost_usd: 0.02 }
-    must_contain: ["Cold Harbor", "10"]
+    # `"10"` was dropped from must_contain for the reason `"one"` was dropped
+    # from `running-count-of-running` in M03: a two-character numeral is not an
+    # assertion. It matches "2010", "$0.10", "10 episodes" and any sentence
+    # that happens to contain the digits — so the case passed whether or not
+    # the model read the episode number, which is the thing being asked.
+    #
+    # The question still asks for the number, and the judge grades completeness
+    # against the question. An answer that omits it loses points there, where
+    # the loss is visible, rather than here, where it never was.
+    must_contain: ["Cold Harbor"]
+    must_not_contain: ["season 3", "Season 3"]
 
   - case_id: summarize-schedule-overview
     capability: summarize
@@ -195,6 +265,22 @@ cases:
     # status field — the failing answer was correct and worded differently.
     # The judge grades completeness; this pins the show it must identify.
     must_contain: ["Severance"]
+    # ── this case carries no bait, and the attempt to give it some is why ────
+    #
+    # M05's curation added `must_not_contain: ["two", "three"]`, reasoning that
+    # two of the three hits are Ended so any count above one is wrong. The
+    # deployed run failed it immediately, on a correct answer: "one of the
+    # three shows is still running — the other two have ended."
+    #
+    # That is the same mistake M03 made here from the other side, when
+    # `must_contain: ["one"]` failed an answer that was right and worded
+    # differently. A numeral is not a claim. "two" appears in a correct answer
+    # as readily as in a wrong count, and no substring can tell "two are
+    # running" from "the other two have ended" — that is a semantic property,
+    # which is what the judge is for.
+    #
+    # So the count is graded by the judge on completeness against the question,
+    # and this case's deterministic half asserts only the show it must name.
 
   - case_id: running-severance-status-word
     capability: running
@@ -203,6 +289,9 @@ cases:
     fixture: search_shows__q-severance.json
     budget: { latency_ms: 15000, cost_usd: 0.01 }
     must_contain: ["Running"]
+    # The other two shows in this fixture are both "Ended", and reading the
+    # status off the wrong record is the mistake this case exists to catch.
+    must_not_contain: ["Ended"]
 
   - case_id: running-empty-set
     capability: running
@@ -232,13 +321,25 @@ cases:
     budget: { latency_ms: 25000, cost_usd: 0.03 }
     must_contain: ["Drama", "Science-Fiction", "Mystery"]
 
-  - case_id: enrichment-severance-runtime
+  - case_id: enrichment-severance-null-runtime
     capability: enrichment
     grading: deterministic
-    prompt: Return the JSON metadata record for Severance with its runtime.
+    prompt: Return the JSON metadata record for Severance. The runtime field must reflect the catalogue exactly.
     fixture: search_shows__q-severance.json
     budget: { latency_ms: 25000, cost_usd: 0.03 }
-    must_contain: ["49"]
+    # This case used to assert `must_contain: ["49"]`, and it was teaching the
+    # opposite of `enrichment-null-network` two cases below.
+    #
+    # TVMaze records `runtime: null` for Severance and `averageRuntime: 49`.
+    # The schema has one field, `runtime`. So the only way to satisfy "49" was
+    # for the model to substitute a *different* field's value into a null one —
+    # the exact move the null-network case exists to catch, rewarded here.
+    # A dataset that punishes an invented network and pays for an invented
+    # runtime is not testing grounding, it is testing which case ran last.
+    #
+    # 49 is now the bait, and good bait: the number is right there in the tool
+    # response, one field over.
+    must_not_contain: ["49"]
 
   - case_id: enrichment-aligned-reverence
     capability: enrichment
@@ -251,10 +352,13 @@ cases:
   - case_id: enrichment-la-riviere-esperance
     capability: enrichment
     grading: deterministic
-    prompt: Return the JSON metadata record for La Rivière Espérance.
+    prompt: Return the JSON metadata record for La Rivière Espérance, including its runtime.
     fixture: search_shows__q-severance.json
     budget: { latency_ms: 25000, cost_usd: 0.03 }
-    must_contain: ["France 2"]
+    # The runtime assertion moved here from the Severance case, because this is
+    # the show the fixture actually records a runtime for: `runtime: 90`, not
+    # null. Same expectation, now grounded in a field that exists.
+    must_contain: ["France 2", "90"]
 
   - case_id: enrichment-null-network
     capability: enrichment

@@ -79,9 +79,20 @@ probes:
   # `injection-tool-escalation` lived here and was removed in M03, not because
   # it failed but because it could not pass: it asserts a Cedar denial, and
   # Cedar runs in the MCP server, which this suite never calls. There is no
-  # agent and no tool call in an M03 request. It returns in M04 with the
-  # walkthrough that gives it something to escalate against — ADR-015, which
-  # also records that M03 therefore tests no tool authorization at all.
+  # agent and no tool call in a request from this suite. ADR-015 records that
+  # it therefore tests no tool authorization at all.
+  #
+  # ADR-015 said the probe returns in M04. **M04 closed without it, and the gap
+  # is unchanged**: this suite still sends to the gateway, and Cedar is still
+  # behind the MCP server, so the probe still has no path from here. Adding one
+  # back would recreate exactly the unrunnable probe ADR-015 forbids.
+  #
+  # ADR-026 supersedes that commitment and records the state plainly: these ten
+  # probes cover guardrail, classification, screening and encoding, and **no
+  # tool authorization at all**. The walkthrough's `guarded` act is not counted
+  # as covering it — that act drives the agent path, but never asks for a tool
+  # the agent does not hold. Closing this needs an adversarial driver that
+  # sends through the agent rather than the gateway.
 
   - probe_id: injection-encoded-instruction
     why: >-

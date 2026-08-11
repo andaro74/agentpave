@@ -18,7 +18,7 @@ def test_dry_run_plans_without_touching_aws(capsys):
     assert main(["eval", "--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "eval plan" in out
-    assert "golden cases:  30" in out
+    assert "golden cases:  31" in out
 
 
 def test_pave_new_is_no_longer_a_stub(tmp_path, capsys):

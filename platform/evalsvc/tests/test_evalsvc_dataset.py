@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 import yaml
 from agentpave_evalsvc.dataset import (
+    FIXTURE_DIR,
     DatasetError,
     load_dataset,
     load_fixture,
@@ -70,9 +71,25 @@ def _write(dataset_dir: Path, *, cases: list, probes: list, samples: list) -> No
 
 def test_shipped_dataset_loads():
     dataset = load_dataset()
-    assert len(dataset.golden) == 30
+    assert len(dataset.golden) == 31
     assert len(dataset.adversarial) == 10
     assert len(dataset.calibration) == 10
+
+
+def test_every_recorded_fixture_carries_at_least_one_case():
+    """A fixture nobody grades against is coverage that is not there.
+
+    `shows_99999999_episodes.json` — the recorded 404 — sat unreferenced from
+    M03 to M05 while appearing in the fixture directory like the rest. The
+    negative fixtures are the valuable ones ("say you don't know" is the
+    behaviour hardest to get and easiest to lose), so an unused one is the
+    expensive kind of gap.
+    """
+    referenced = {case.fixture for case in load_dataset().golden}
+    recorded = {path.name for path in FIXTURE_DIR.glob("*.json")}
+    assert not recorded - referenced, (
+        f"recorded but graded by no case: {', '.join(sorted(recorded - referenced))}"
+    )
 
 
 def test_shipped_dataset_covers_all_four_capabilities():
