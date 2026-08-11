@@ -208,5 +208,20 @@ walkthrough: ## M04 deployed gate: Act 1 end to end
 	@$(WITH_ENV) uv run python -m agentpave_infra.walkthrough
 
 .PHONY: seed-baseline
-seed-baseline: ## M05: write the current eval scores as the CI gate baseline
-	$(call not_yet,seed-baseline,M05)
+seed-baseline: ## M05 deployed: write the current eval scores as the CI gate baseline
+	@# A thin wrapper for the same reason `eval` is one: `pave eval` is the
+	@# single implementation, so CI and a laptop cannot drift onto different
+	@# code paths.
+	@#
+	@# `--save-baseline` without `--diff`. Seeding is the deliberate act of
+	@# setting the bar a pull request will be blocked against, and it is the one
+	@# case where there may be nothing to compare to yet — a fresh stack has no
+	@# history, and `--diff` there prints an absence rather than a comparison.
+	@#
+	@# Only a passing run is recorded (`is_recordable`). M03's teeth
+	@# demonstration deliberately broke the service, scored 19/30, and wrote it
+	@# down as the baseline; the next run then "improved" on a regression and
+	@# the diff reported no problem. That row stays in the history — deleting a
+	@# measurement to tidy a chart is the instinct this platform exists to
+	@# resist — but a failing run can no longer become the bar.
+	@$(WITH_ENV) uv run pave eval --save-baseline
