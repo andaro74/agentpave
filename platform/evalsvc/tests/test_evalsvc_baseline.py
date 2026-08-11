@@ -12,6 +12,7 @@ from agentpave_evalsvc.calibration import calibrate, meets_floor
 from agentpave_evalsvc.calibration import render as render_calibration
 from agentpave_evalsvc.judge import JudgeError
 from agentpave_evalsvc.models import (
+    UNRECORDED_MODEL,
     Baseline,
     CalibrationSample,
     CaseResult,
@@ -40,13 +41,24 @@ def _card(results: list[tuple[str, str, bool]], cost: float = 0.01) -> Scorecard
     )
 
 
-def _baseline(by_capability: dict[str, float], pass_rate: float, cost: float = 0.01) -> Baseline:
+def _baseline(
+    by_capability: dict[str, float],
+    pass_rate: float,
+    cost: float = 0.01,
+    model_serve: str = "serve",
+    model_judge: str = "judge",
+) -> Baseline:
+    # Defaults match `_card`, so a test that says nothing about models is
+    # testing a same-models comparison — which is what every diff test below
+    # means, and what they would silently stop meaning otherwise.
     return Baseline(
         run_id="run-1",
         created_at="2026-08-07T00:00:00+00:00",
         pass_rate=pass_rate,
         total_cost_usd=cost,
         by_capability=by_capability,
+        model_serve=model_serve,
+        model_judge=model_judge,
     )
 
 
@@ -114,6 +126,54 @@ def test_baseline_round_trips_from_a_scorecard():
     baseline = Baseline.from_scorecard(card)
     assert baseline.pass_rate == 0.5
     assert baseline.by_capability == {"airing": 1.0, "enrichment": 0.0}
+    # The models travel with the numbers. The gateway stack publishes both ids
+    # because "a score change and a model change look identical after the
+    # fact"; the scorecard recorded them and the baseline used to drop them, so
+    # the store contradicted its own stated reason for existing.
+    assert baseline.model_serve == "serve"
+    assert baseline.model_judge == "judge"
+
+
+def test_a_changed_model_is_reported_and_is_not_itself_a_regression():
+    """Swapping a model is a fact about the comparison, not a verdict on it.
+
+    Treating it as a regression would block every deliberate model upgrade;
+    ignoring it lets a pass-rate drop be read as a quality regression when a
+    different model answered. Both are wrong, so it is reported separately.
+    """
+    card = _card([("a", "airing", True)])
+    result = diff(card, _baseline({"airing": 1.0}, 1.0, model_serve="an-older-haiku"))
+    assert result.model_changes == (("serving", "an-older-haiku", "serve"),)
+    assert not result.regressed
+
+
+def test_render_warns_that_a_diff_across_a_model_swap_compares_two_systems():
+    card = _card([("a", "airing", True), ("b", "airing", False)])
+    rendered = render(diff(card, _baseline({"airing": 1.0}, 1.0, model_judge="an-older-sonnet")))
+    assert "judge model changed" in rendered
+    assert "two different systems" in rendered
+    # The regression verdict still stands on the numbers; the warning tells a
+    # reader how much the numbers are worth, it does not suppress them.
+    assert "REGRESSED" in rendered
+
+
+def test_a_baseline_recorded_before_models_were_stored_still_loads():
+    """Every row written before M05 lacks these attributes.
+
+    A fix that made the existing history unreadable would be unshippable, and
+    the failure would arrive as a crash in the gate rather than as a missing
+    field. `unrecorded` is the honest value for a row that never knew.
+    """
+    legacy = Baseline(
+        run_id="run-0",
+        created_at="2026-08-07T00:00:00+00:00",
+        pass_rate=1.0,
+        total_cost_usd=0.01,
+        by_capability={"airing": 1.0},
+    )
+    assert legacy.model_serve == UNRECORDED_MODEL
+    result = diff(_card([("a", "airing", True)]), legacy)
+    assert ("serving", UNRECORDED_MODEL, "serve") in result.model_changes
 
 
 # ── calibration ───────────────────────────────────────────────────────────

@@ -29,6 +29,13 @@ JudgeAxis = Literal["groundedness", "completeness", "tone"]
 # rejects a third that looks like success but is not — see `adversarial.py`.
 AdversarialOutcome = Literal["guardrail_blocked", "policy_denied", "model_complied"]
 
+# What a baseline says when it does not know which models produced it. Every
+# row written before M05 is in that state, and reading one has to stay possible
+# — a store that raised on its own history would make the fix unshippable.
+# Named rather than left as an empty string so a diff can say "unrecorded"
+# instead of printing nothing and looking like a match.
+UNRECORDED_MODEL = "unrecorded"
+
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -248,6 +255,17 @@ class Baseline(_Strict):
     pass_rate: float = Field(ge=0.0, le=1.0)
     total_cost_usd: float = Field(ge=0.0)
     by_capability: dict[str, float]
+    # Which models produced the bar. The gateway stack publishes both ids as
+    # outputs with the reason attached: "a baseline whose model pair is unknown
+    # is not comparable to the next run — a score change and a model change look
+    # identical after the fact". `Scorecard` recorded them and this dropped
+    # them, so the reason was written down and the store contradicted it.
+    #
+    # Defaulted rather than required because rows written before M05 have no
+    # such attribute, and a baseline that cannot be read is worse than one that
+    # cannot name its models. `UNRECORDED` says which is which.
+    model_serve: str = UNRECORDED_MODEL
+    model_judge: str = UNRECORDED_MODEL
 
     @classmethod
     def from_scorecard(cls, card: Scorecard) -> "Baseline":
@@ -257,6 +275,8 @@ class Baseline(_Strict):
             pass_rate=card.pass_rate,
             total_cost_usd=card.total_cost_usd,
             by_capability=card.score_by_capability(),
+            model_serve=card.model_serve,
+            model_judge=card.model_judge,
         )
 
 
@@ -272,6 +292,12 @@ class ScoreDiff(_Strict):
     by_capability_delta: dict[str, float]
     appeared: tuple[str, ...] = ()
     disappeared: tuple[str, ...] = ()
+    # `(before, after)` for each model that changed between the baseline and
+    # this run, or empty when the pair is unchanged. Not a regression by
+    # itself — it is the fact that makes the rest of the diff readable. A pass
+    # rate that moved and a model that moved in the same run are one number
+    # explaining nothing, and M05's gate blocks pull requests on that number.
+    model_changes: tuple[tuple[str, str, str], ...] = ()
 
     @property
     def regressed(self) -> bool:

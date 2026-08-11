@@ -20,7 +20,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any
 
-from .models import Baseline, Scorecard, ScoreDiff
+from .models import UNRECORDED_MODEL, Baseline, Scorecard, ScoreDiff
 
 TABLE_ENV = "AGENTPAVE_BASELINE_TABLE"
 
@@ -45,6 +45,18 @@ def diff(current: Scorecard, previous: Baseline) -> ScoreDiff:
     before = previous.by_capability
 
     shared = sorted(set(now) & set(before))
+    # A model swap is reported alongside the numbers, never folded into them.
+    # Without it a reader sees "pass rate -6.5%" and has no way to tell a
+    # quality regression from a different model answering — which is the
+    # question a score diff exists to answer.
+    model_changes = tuple(
+        (name, was, is_now)
+        for name, was, is_now in (
+            ("serving", previous.model_serve, current.model_serve),
+            ("judge", previous.model_judge, current.model_judge),
+        )
+        if was != is_now
+    )
     return ScoreDiff(
         baseline_run_id=previous.run_id,
         pass_rate_delta=round(current.pass_rate - previous.pass_rate, 6),
@@ -52,6 +64,7 @@ def diff(current: Scorecard, previous: Baseline) -> ScoreDiff:
         by_capability_delta={cap: round(now[cap] - before[cap], 6) for cap in shared},
         appeared=tuple(sorted(set(now) - set(before))),
         disappeared=tuple(sorted(set(before) - set(now))),
+        model_changes=model_changes,
     )
 
 
@@ -69,6 +82,11 @@ def render(result: ScoreDiff) -> str:
         lines.append(f"    {cap}: appeared (no baseline)")
     for cap in result.disappeared:
         lines.append(f"    {cap}: DISAPPEARED — cases did not run")
+    # Printed before the verdict, because it changes how the verdict reads.
+    for name, was, is_now in result.model_changes:
+        lines.append(f"  ! {name} model changed: {was} → {is_now}")
+    if result.model_changes:
+        lines.append("    the numbers above compare two different systems")
     lines.append("  REGRESSED" if result.regressed else "  no regression")
     return "\n".join(lines)
 
@@ -120,6 +138,8 @@ def put_baseline(table_name: str, baseline: Baseline) -> None:
             "by_capability": {
                 cap: Decimal(str(score)) for cap, score in baseline.by_capability.items()
             },
+            "model_serve": baseline.model_serve,
+            "model_judge": baseline.model_judge,
         }
     )
 
@@ -150,4 +170,10 @@ def latest_baseline(table_name: str) -> Baseline | None:
         pass_rate=float(item["pass_rate"]),
         total_cost_usd=float(item["total_cost_usd"]),
         by_capability={cap: float(score) for cap, score in item["by_capability"].items()},
+        # `.get`, not `[...]`: every row written before M05 predates these
+        # attributes, and the first thing this fix would otherwise do is make
+        # the existing history unreadable. An old row reports `unrecorded`,
+        # which is the truth about it.
+        model_serve=item.get("model_serve", UNRECORDED_MODEL),
+        model_judge=item.get("model_judge", UNRECORDED_MODEL),
     )
