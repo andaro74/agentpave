@@ -158,6 +158,9 @@ class GatewayStack(Stack):
         # IAM auth, not public. ROADMAP describes the smoke gate as "a curl";
         # an unauthenticated URL in front of Bedrock is not a thing to ship
         # even in a demo, so the smoke script signs its request instead.
+        # No resource-based policy — see the note on the same URL in
+        # `mcp_tvmaze_stack.py`. Same-account callers are authorized by their
+        # own identity policy, and the scaffolded service's role carries it.
         self.function_url = self.gateway_function.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.AWS_IAM,
         )

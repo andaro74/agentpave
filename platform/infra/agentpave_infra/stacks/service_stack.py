@@ -39,6 +39,11 @@ BOUNDARY_ACTIONS = (
     "logs:CreateLogStream",
     "logs:PutLogEvents",
     "lambda:InvokeFunctionUrl",
+    # Both halves, or neither works. Since October 2025 an IAM-authed function
+    # URL requires `lambda:InvokeFunction` *as well as* `lambda:InvokeFunctionUrl`
+    # from the caller. The ceiling has to admit it too — a grant the boundary
+    # does not cover is not a grant.
+    "lambda:InvokeFunction",
     "execute-api:Invoke",
     "xray:PutTraceSegments",
     "xray:PutTelemetryRecords",
@@ -116,13 +121,38 @@ class ServiceStack(Stack):
         # Calling the gateway and the MCP server is the whole permission set.
         # Both are IAM-authenticated Function URLs, so this is what "signed
         # requests" costs in policy terms (ADR-010).
+        #
+        # Two statements, because an IAM-authed function URL takes two actions.
+        # Since October 2025 the caller needs `lambda:InvokeFunction` as well as
+        # `lambda:InvokeFunctionUrl`; with only the latter, every call comes
+        # back 403 from the URL endpoint with no invocation logged on the far
+        # side to say why. Nothing in a synthesised template shows it, the IAM
+        # assertions here were all green, and `make smoke-gateway` could not see
+        # it either — the smoke gate signs as the developer, and a developer's
+        # own credentials are not what the paved road runs on. It cost M04 an
+        # afternoon; the assertion in `test_service_stack.py` is the receipt.
+        #
+        #   https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+        #
+        # `InvokedViaFunctionUrl` is what keeps the second action honest. Bare
+        # `lambda:InvokeFunction` would let a scaffolded service call any
+        # function in the account through the ordinary Invoke API — including
+        # the gateway, bypassing its URL, and anything else that happens to
+        # live here. The condition narrows it back to "only by knocking on the
+        # front door", which is the permission we actually meant to grant.
+        function_scope = f"arn:aws:lambda:{self.region}:{self.account}:function:*"
         self.service_role.add_to_policy(
             iam.PolicyStatement(
                 actions=["lambda:InvokeFunctionUrl"],
-                resources=[
-                    f"arn:aws:lambda:{self.region}:{self.account}:function:*",
-                ],
+                resources=[function_scope],
                 conditions={"StringEquals": {"lambda:FunctionUrlAuthType": "AWS_IAM"}},
+            )
+        )
+        self.service_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["lambda:InvokeFunction"],
+                resources=[function_scope],
+                conditions={"Bool": {"lambda:InvokedViaFunctionUrl": "true"}},
             )
         )
 

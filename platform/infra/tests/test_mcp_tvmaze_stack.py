@@ -80,6 +80,14 @@ def test_function_url_requires_iam_auth(template: Template) -> None:
     template.has_resource_properties("AWS::Lambda::Url", {"AuthType": "AWS_IAM"})
 
 
+def test_the_url_grants_nobody_through_a_resource_policy(template: Template) -> None:
+    """Callers are authorized by their own identity policy, not by a standing
+    grant here. Every consumer is in this account, and AWS takes either one for
+    a same-account principal — so an `AddPermission` naming the account root
+    would widen the door without opening anything that was shut."""
+    assert not template.find_resources("AWS::Lambda::Permission")
+
+
 def test_function_is_told_which_identity_to_authorize_as(template: Template) -> None:
     template.has_resource_properties(
         "AWS::Lambda::Function",

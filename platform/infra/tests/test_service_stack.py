@@ -129,6 +129,48 @@ def test_the_role_attaches_no_managed_policies_beyond_its_boundary(template: Tem
         )
 
 
+def test_the_role_can_actually_call_an_iam_authed_function_url(template: Template) -> None:
+    """Both actions, or the service cannot reach a single tool.
+
+    Since October 2025 an IAM-authed function URL requires the caller to hold
+    `lambda:InvokeFunction` as well as `lambda:InvokeFunctionUrl`. With only the
+    URL action the call is refused at the endpoint — 403, no invocation logged
+    on the far side, nothing to distinguish it from a bad signature. Synth was
+    clean, the deploy was clean, and every other assertion in this file was
+    green while the golden path was completely broken.
+
+    Asserted against the boundary too: a grant the ceiling does not admit is
+    not a grant.
+
+    https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html
+    """
+    granted = {action for statement in _statements(template) for action in _actions(statement)}
+    for action in ("lambda:InvokeFunctionUrl", "lambda:InvokeFunction"):
+        assert action in granted, f"{action} is required to invoke an IAM-authed function URL"
+        assert action in BOUNDARY_ACTIONS, f"the boundary caps the role below {action}"
+
+
+def test_direct_invocation_is_shut_even_though_invoke_is_granted(template: Template) -> None:
+    """`lambda:InvokeFunction` is granted for the front door only.
+
+    Unconditioned, it would let a scaffolded service call any function in the
+    account through the ordinary Invoke API — the gateway without its URL, and
+    whatever else lives here. `InvokedViaFunctionUrl` is what keeps the second
+    action to the permission we meant to grant.
+    """
+    statements = [
+        statement
+        for policy in template.find_resources("AWS::IAM::Policy").values()
+        for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+        if _actions(statement) == ["lambda:InvokeFunction"]
+    ]
+    assert statements, "the service needs lambda:InvokeFunction to use a function URL at all"
+    for statement in statements:
+        assert statement.get("Condition") == {"Bool": {"lambda:InvokedViaFunctionUrl": "true"}}, (
+            "unconditioned lambda:InvokeFunction is direct invocation of anything in the account"
+        )
+
+
 # ── the rest of the shape ─────────────────────────────────────────────────
 
 

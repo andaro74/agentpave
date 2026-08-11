@@ -77,6 +77,11 @@ class McpTvmazeStack(Stack):
             },
         )
 
+        # No resource-based policy. Callers live in this account, and for a
+        # same-account principal AWS takes an identity-based grant *or* a
+        # resource-based one — the scaffolded service carries the former
+        # (`service_stack.py`). A standing `AddPermission` for the account root
+        # would be a second door with nothing behind it.
         self.function_url = self.mcp_function.add_function_url(
             auth_type=lambda_.FunctionUrlAuthType.AWS_IAM,
         )

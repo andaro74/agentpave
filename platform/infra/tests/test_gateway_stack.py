@@ -127,6 +127,13 @@ def test_function_url_requires_iam_auth(template: Template) -> None:
     template.has_resource_properties("AWS::Lambda::Url", {"AuthType": "AWS_IAM"})
 
 
+def test_the_url_grants_nobody_through_a_resource_policy(template: Template) -> None:
+    """See the twin of this test in `test_mcp_tvmaze_stack.py`. Same-account
+    callers are authorized by their own identity policy; a standing grant to
+    the account root here would open nothing that was shut."""
+    assert not template.find_resources("AWS::Lambda::Permission")
+
+
 def test_log_group_has_bounded_retention(template: Template) -> None:
     # Never-expiring logs are a slow leak that bills while idle.
     template.has_resource_properties("AWS::Logs::LogGroup", {"RetentionInDays": Match.any_value()})
