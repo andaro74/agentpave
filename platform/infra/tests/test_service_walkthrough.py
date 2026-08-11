@@ -10,6 +10,7 @@ Every function under test is pure over dictionaries. Nothing here touches AWS.
 
 from __future__ import annotations
 
+from agentpave_infra.stacks.service_stack import UNWIRED_HOST
 from agentpave_infra.walkthrough import (
     GUARDED_QUESTION,
     QUESTION,
@@ -21,6 +22,15 @@ from agentpave_infra.walkthrough import (
     judge_traced,
     report,
 )
+
+DEPLOYED_OUTPUTS = {
+    "ServiceUrl": "https://x.lambda-url.invalid/",
+    "ServiceRoleArn": "arn:aws:iam::1:role/r",
+}
+WIRED_ENV = {
+    "AGENTPAVE_GATEWAY_URL": "https://gw.lambda-url.us-west-2.on.aws/",
+    "AGENTPAVE_MCP_URL": "https://mcp.lambda-url.us-west-2.on.aws/mcp",
+}
 
 SERVED_ROW = {
     "service_id": SERVICE_ID,
@@ -38,7 +48,7 @@ BLOCKED_ROW = {"service_id": SERVICE_ID, "outcome": "blocked", "cost_usd": "0"}
 
 
 def test_a_service_without_its_own_stack_outputs_fails():
-    result = judge_scaffolded({})
+    result = judge_scaffolded({}, WIRED_ENV)
     assert not result.passed
     assert "ServiceUrl" in result.detail
 
@@ -46,13 +56,31 @@ def test_a_service_without_its_own_stack_outputs_fails():
 def test_a_service_with_a_url_but_no_identity_fails():
     """A function with no role of its own has no identity for Cedar to
     authorize or for the permissions boundary to constrain."""
-    assert not judge_scaffolded({"ServiceUrl": "https://x.lambda-url.invalid/"}).passed
+    assert not judge_scaffolded({"ServiceUrl": "https://x.lambda-url.invalid/"}, WIRED_ENV).passed
 
 
-def test_a_deployed_service_stack_passes():
-    assert judge_scaffolded(
-        {"ServiceUrl": "https://x.lambda-url.invalid/", "ServiceRoleArn": "arn:aws:iam::1:role/r"}
-    ).passed
+def test_a_service_still_pointing_at_the_placeholder_fails():
+    """The regression this act was extended for. A perfect deploy that nobody
+    wired: the stack is right, the role is right, and every later act fails on a
+    DNS lookup with the cause named nowhere."""
+    unwired = dict(WIRED_ENV, AGENTPAVE_MCP_URL=f"https://{UNWIRED_HOST}/mcp")
+    result = judge_scaffolded(DEPLOYED_OUTPUTS, unwired)
+    assert not result.passed
+    assert "AGENTPAVE_MCP_URL" in result.detail
+    assert UNWIRED_HOST in result.detail
+
+
+def test_a_service_missing_a_platform_url_entirely_fails():
+    """Absent is not the same failure as placeholder, and neither may pass. An
+    empty environment is what a function whose stack was hand-edited looks
+    like."""
+    result = judge_scaffolded(DEPLOYED_OUTPUTS, {})
+    assert not result.passed
+    assert "AGENTPAVE_GATEWAY_URL" in result.detail
+
+
+def test_a_deployed_and_wired_service_stack_passes():
+    assert judge_scaffolded(DEPLOYED_OUTPUTS, WIRED_ENV).passed
 
 
 # ── answered ──────────────────────────────────────────────────────────────

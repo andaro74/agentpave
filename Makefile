@@ -113,14 +113,48 @@ WITH_ENV := test -f .env || { echo "✋ no .env — run 'make install' and edit 
 bootstrap: ## ⚠️ once per account+region — CDK toolkit stack
 	@$(WITH_ENV) cdk bootstrap
 
+# Reads one CloudFormation output. $(1) stack suffix · $(2) output key
+define stack_output
+$$(aws cloudformation describe-stacks --stack-name "AgentPave-$(1)-$$stage" \
+	--query 'Stacks[0].Outputs[?OutputKey==`$(2)`].OutputValue' --output text 2>/dev/null)
+endef
+
 .PHONY: deploy-dev
 deploy-dev: build ## ⚠️ creates real infrastructure
 	@# Every asset variable is set here, and forgetting one is silent: the CDK
 	@# app falls back to plain source, which synthesises, passes every IAM
 	@# assertion, deploys without complaint, and then 502s at import. That is
 	@# how M04's first walkthrough failed.
-	@$(WITH_ENV) AGENTPAVE_GATEWAY_ASSET=$(GATEWAY_BUILD) AGENTPAVE_MCP_ASSET=$(MCP_BUILD) \
-		AGENTPAVE_SERVICE_ASSET=$(SERVICE_BUILD) \
+	@#
+	@# Two passes, because the service has to be *told* where the platform is.
+	@# The gateway and MCP URLs are Function URLs, so they do not exist until
+	@# those stacks are deployed, and the service cannot import them as
+	@# cross-stack references (see app.py: a hard reference would pin the
+	@# gateway alive for as long as any service exists). So: deploy the
+	@# platform, read the URLs it published, then deploy the service knowing
+	@# them. Pass two is `--all` so a stack added later is still covered; the
+	@# platform stacks are unchanged by then and deploy as no-ops.
+	@#
+	@# Skipping the wiring is silent in exactly the way the asset variables are:
+	@# the service deploys clean and then 502s on a tool call to a host that
+	@# does not resolve. That is how M04's *second* walkthrough failed.
+	@$(WITH_ENV) set -e; \
+	stage=$${AGENTPAVE_STAGE:-dev}; \
+	export AGENTPAVE_GATEWAY_ASSET=$(GATEWAY_BUILD) AGENTPAVE_MCP_ASSET=$(MCP_BUILD) \
+	       AGENTPAVE_SERVICE_ASSET=$(SERVICE_BUILD); \
+	echo "── pass 1: the platform ─────────────────────────────────────────"; \
+	cdk deploy --require-approval broadening \
+		"AgentPave-Gateway-$$stage" "AgentPave-Mcp-$$stage" "AgentPave-Eval-$$stage"; \
+	gateway_url=$(call stack_output,Gateway,FunctionUrl); \
+	mcp_url=$(call stack_output,Mcp,McpUrl); \
+	for pair in "gateway:$$gateway_url" "mcp:$$mcp_url"; do \
+		if [ -z "$${pair#*:}" ] || [ "$${pair#*:}" = "None" ]; then \
+			echo "✋ the $${pair%%:*} stack deployed but published no URL — refusing to"; \
+			echo "   deploy a service that would 502 on every call"; exit 1; \
+		fi; \
+	done; \
+	echo "── pass 2: services, wired to $$gateway_url ─────────"; \
+	AGENTPAVE_GATEWAY_URL="$$gateway_url" AGENTPAVE_MCP_URL="$$mcp_url" \
 		cdk deploy --all --require-approval broadening
 
 .PHONY: destroy-dev

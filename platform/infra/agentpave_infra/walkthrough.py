@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from agentpave_infra.stacks.service_stack import UNWIRED_HOST
+
 SERVICE_STACK_DEFAULT = "AgentPave-Service-CatalogAgent-dev"
 GATEWAY_STACK_DEFAULT = "AgentPave-Gateway-dev"
 SERVICE_ID = "catalog-agent"
@@ -63,6 +65,12 @@ REFUSAL_STAGES = ("guardrail", "screening")
 # when they differ — a failure with no error and no red test anywhere else.
 REQUIRED_SPAN_ATTRIBUTES = ("gen_ai.system", "gen_ai.operation.name")
 
+# What a scaffolded service must be told before it is worth asking anything.
+# Deliberately not "every variable the function has" — the point of this list is
+# that it is the set the *deploy* has to resolve from other stacks' outputs, and
+# so the set that can be forgotten.
+WIRED_ENV_VARS = ("AGENTPAVE_GATEWAY_URL", "AGENTPAVE_MCP_URL")
+
 
 @dataclass(frozen=True)
 class Result:
@@ -71,18 +79,46 @@ class Result:
     detail: str
 
 
-def judge_scaffolded(outputs: dict[str, str]) -> Result:
-    """The scaffolded service reached AWS at all.
+def judge_scaffolded(outputs: dict[str, str], environment: dict[str, str]) -> Result:
+    """The scaffolded service reached AWS, and is wired to the platform.
 
     Its own stack, not a stanza inside the gateway's — ARCHITECTURE.md §4 asks
     for one stack per component, and a service whose infrastructure lives in
     someone else's stack cannot be torn down on its own.
+
+    The wiring half was added after a run where every other act failed and none
+    of them said why. The service had deployed perfectly and been told nothing:
+    its gateway and MCP URLs still pointed at the synth-time placeholder, so the
+    tool call died on a DNS lookup and surfaced as a 502 with a
+    `NameResolutionError` buried in it. Three red acts, one cause, and the cause
+    named nowhere. Configuration is checked here, before anything is asked, so
+    an unwired service fails as an unwired service.
     """
     url = outputs.get("ServiceUrl")
     if not url:
         return Result("scaffolded", False, f"no ServiceUrl output — found {sorted(outputs)}")
     if not outputs.get("ServiceRoleArn"):
         return Result("scaffolded", False, "no ServiceRoleArn output; the service has no identity")
+
+    missing = [name for name in WIRED_ENV_VARS if not environment.get(name)]
+    if missing:
+        return Result(
+            "scaffolded",
+            False,
+            f"deployed without {', '.join(missing)} — the service was never told where "
+            "the platform is",
+        )
+
+    unwired = [name for name in WIRED_ENV_VARS if UNWIRED_HOST in environment[name]]
+    if unwired:
+        return Result(
+            "scaffolded",
+            False,
+            f"{', '.join(unwired)} still points at the {UNWIRED_HOST} placeholder — this "
+            "service deployed unwired; `make deploy-dev` resolves the real URLs from the "
+            "platform stacks' outputs",
+        )
+
     return Result("scaffolded", True, f"deployed as its own stack at {url}")
 
 
@@ -273,6 +309,19 @@ def _stack_outputs(stack_name: str) -> dict[str, str]:
     return {o["OutputKey"]: o["OutputValue"] for o in stacks[0].get("Outputs", [])}
 
 
+def _function_environment(function_name: str) -> dict[str, str]:
+    """The deployed function's environment, as CloudFormation left it.
+
+    Read from Lambda rather than from the synthesised template: the template
+    says what this checkout *would* deploy, and the question here is what is
+    actually running in front of the questions about to be asked.
+    """
+    import boto3
+
+    config = boto3.client("lambda").get_function_configuration(FunctionName=function_name)
+    return dict(config.get("Environment", {}).get("Variables", {}))
+
+
 def _ask(url: str, question: str) -> tuple[int, dict[str, Any]]:
     """POST a SigV4-signed question to the service's Function URL.
 
@@ -353,7 +402,10 @@ def main(
     service_outputs = _stack_outputs(service_stack)
     gateway_outputs = _stack_outputs(gateway_stack)
 
-    results = [judge_scaffolded(service_outputs)]
+    function_name = service_outputs.get("ServiceFunctionName", "")
+    environment = _function_environment(function_name) if function_name else {}
+
+    results = [judge_scaffolded(service_outputs, environment)]
     if not results[0].passed:
         rendered, _ = report(results)
         print(rendered)

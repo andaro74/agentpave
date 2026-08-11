@@ -48,6 +48,19 @@ BOUNDARY_ACTIONS = (
 # healthy walkthrough makes a handful, and a runaway loop makes thousands.
 INVOCATION_ALARM_THRESHOLD = 200
 
+# The host a service points at before anything has wired it to the platform.
+# Synth has to succeed with no AWS account (standing rule 4), so the gateway and
+# MCP URLs cannot be cross-stack references — they are resolved from the other
+# stacks' outputs by `make deploy-dev` and passed in. Until then the service
+# points here, and `.invalid` is reserved by RFC 2606 precisely so that it can
+# never accidentally resolve to somebody's server.
+#
+# It is named rather than inlined because the walkthrough checks the deployed
+# function's environment for it: a service that deployed unwired must fail the
+# gate as a configuration error, not as a DNS error three layers down inside a
+# 502. That is what M04's second deployed walkthrough did.
+UNWIRED_HOST = "unset.invalid"
+
 
 class ServiceStack(Stack):
     """Lambda + Function URL for one scaffolded agent service."""

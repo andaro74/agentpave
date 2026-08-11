@@ -13,7 +13,7 @@ import aws_cdk as cdk
 from agentpave_infra.stacks.eval_stack import EvalStack
 from agentpave_infra.stacks.gateway_stack import GatewayStack
 from agentpave_infra.stacks.mcp_tvmaze_stack import McpTvmazeStack
-from agentpave_infra.stacks.service_stack import ServiceStack
+from agentpave_infra.stacks.service_stack import UNWIRED_HOST, ServiceStack
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -57,14 +57,19 @@ EvalStack(
 # outputs at deploy time rather than imported as cross-stack references: a
 # hard reference would make the gateway undeployable while a service that
 # depends on it exists, and M04's walkthrough tears services down routinely.
+#
+# Which means these defaults are load-bearing in one direction only. They exist
+# so that `cdk synth` works with no AWS account; they are *not* a deployable
+# configuration, and `make deploy-dev` resolves the real URLs from the platform
+# stacks' outputs before it deploys this one.
 ServiceStack(
     app,
     f"AgentPave-Service-CatalogAgent-{STAGE}",
     asset_path=os.environ.get("AGENTPAVE_SERVICE_ASSET", str(DEFAULT_SERVICE_ASSET)),
     service_name="catalog-agent",
     package="agentpave_catalog_agent",
-    gateway_url=os.environ.get("AGENTPAVE_GATEWAY_URL", "https://unset.invalid/"),
-    mcp_url=os.environ.get("AGENTPAVE_MCP_URL", "https://unset.invalid/mcp"),
+    gateway_url=os.environ.get("AGENTPAVE_GATEWAY_URL", f"https://{UNWIRED_HOST}/"),
+    mcp_url=os.environ.get("AGENTPAVE_MCP_URL", f"https://{UNWIRED_HOST}/mcp"),
     description="AgentPave catalog-agent: the scaffolded sample service",
 )
 
