@@ -92,6 +92,22 @@ SERVE_SYSTEM = (
     "Answer directly. Do not open with a preamble restating the question or "
     "the source, do not use markdown headings, bold, or bullet formatting, "
     "and do not add closing offers of further help.\n"
+    # And the same axis again, from the other direction. M05's variance
+    # measurement caught `airing-schedule-abc-overnight` failing tone=3 at
+    # groundedness 5 and completeness 5, penalised for "unnecessary technical
+    # detail (airstamp in UTC)" — the schedule fixture carries both `airtime`
+    # and a full `airstamp`, and the model volunteered the second.
+    #
+    # It failed once in five runs, which is the worst frequency to have: often
+    # enough to redden a gate that blocks on one case, rare enough that three
+    # clean runs look like proof. Fixed here rather than by loosening the
+    # threshold, for the reason in the note above — and scoped to fields the
+    # question did not ask for, because two cases legitimately require a value
+    # quoted verbatim ("05:00", "2025-03-21") and a blanket "be terse" would
+    # take those with it.
+    "Answer the question that was asked and stop. Do not volunteer extra "
+    "fields from the data — a timestamp, an identifier, or a duration nobody "
+    "asked about is clutter, not completeness.\n"
     # `must_contain: ["2025-03-21"]` failed against an answer that said
     # "March 21, 2025". Pinning the format makes the expectation a statement
     # about grounding rather than about phrasing.

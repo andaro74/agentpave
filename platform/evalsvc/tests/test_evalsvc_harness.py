@@ -251,6 +251,12 @@ def test_serving_instructions_forbid_the_padding_the_judge_penalised():
     lowered = SERVE_SYSTEM.lower()
     assert "preamble" in lowered
     assert "markdown" in lowered
+    # The volunteered-field clause, which is the same axis from the other
+    # direction: `airing-schedule-abc-overnight` scored tone=3 at groundedness
+    # 5 and completeness 5 for appending an airstamp nobody asked for. Pinned
+    # because it failed once in five runs — rare enough that its absence would
+    # look like a fluke rather than a regression.
+    assert "clutter, not completeness" in lowered
     # And the ISO date instruction that makes `must_contain: ["2025-03-21"]`
     # an assertion about grounding rather than about phrasing.
     assert "yyyy-mm-dd" in lowered
