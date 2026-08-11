@@ -29,6 +29,10 @@ CI runs the hermetic gates; a human runs everything below.
 
 | 2026-08-11 | M04 | deployed | `make walkthrough` run by a human, on the same deployed stack | **5/5.** This is the row the definition of done actually asks for: the previous one was produced by an agent debugging its own fix, which is the weakest possible witness to that fix working. An independent run against the same infrastructure is what closes the gate. It also came back **identical** — same grounded answer, same `contentPolicy:PROMPT_ATTACK` block, same two rows at `$0.000629`, same two spans. Identical cost across two runs means identical token counts, which is ADR-016's pinned temperature doing what it was pinned for, observed rather than claimed | Nothing to fix. M04's deployed gate is demonstrated; the milestone's remaining open items (uncurated golden set and probes, the unreferenced 404 fixture, the judge's near-miss blind spot) are documented deferrals, not gate failures, and are listed below |
 
+| 2026-08-11 | M05 | hermetic | Curation of the golden set and probes, ahead of seeding the CI baseline | **7 of 30 golden cases edited (23%), 1 added, 0 of 10 probes edited** — comparable to M03's 20% on the calibration samples. The find that justified the pass: **`enrichment-severance-runtime` was paying the model to hallucinate.** TVMaze records `runtime: null` for Severance and `averageRuntime: 49`, and the schema has one `runtime` field — so `must_contain: ["49"]` could only be satisfied by substituting a different field's value into a null one, which is the exact move `enrichment-null-network` exists three cases later to catch. The dataset punished an invented network and rewarded an invented runtime, and both cases were green. 49 is now the bait; the runtime assertion moved to La Rivière Espérance, whose `runtime` is genuinely 90. Also: `"10"` dropped from the finale case for the reason `"one"` was dropped in M03 (a two-character numeral matches "2010" and any sentence containing the digits); `"Science-Fiction"` relaxed to `"Fiction"` in the one prose case, since the fixture hyphenates and English usually does not; bait added to four cases that had none, including two of the three near-duplicate `running` cases that had been asserting one fact three times | **One edit was wrong and was reverted.** `airing-severance-status` was rewritten because half its question — "is it still running" — cannot be grounded in an episode list. That is deliberate: two hand-labelled calibration samples exist *because* of it, one rewarding an answer that declines the ungroundable half and one failing the near-miss that invents "still running". It is the dataset's only measurement of "say you don't know". The loader's calibration cross-reference caught the rename; the case is restored with a comment saying why it must stay ungroundable. The recorded 404 now grounds a case, and a test asserts every recorded fixture is graded by at least one, so the next unused fixture fails `make check` rather than sitting in a directory looking like coverage. ADR-026 written — and its own first draft deferred the tool-authorization gap to M06, a `(stretch)` milestone, which is the mistake it was written to correct; corrected before commit |
+
+| 2026-08-11 | M05 | deployed | Suite variance measured before seeding the CI baseline — five runs, ~$2.35 | **The first two runs of the curated set disagreed with each other, and that mattered more than either score.** Run A: 30/31, failing `running-count-of-running` on bait added an hour earlier — `must_not_contain: ["two"]` against the correct answer *"one of the three shows is still running; the other two have ended"*. That is M03's `must_contain: ["one"]` mistake from the opposite side: a numeral is not a claim, and no substring separates "two are running" from "the other two have ended". Run B, with that bait removed: 29/31, and **two cases that had passed in run A now failed** — `enrichment-severance-null-runtime` and `airing-schedule-abc-overnight` (tone=3 against a threshold of 4, groundedness 5, completeness 5, penalised for "unnecessary technical detail (airstamp in UTC)"). Temperature is pinned at 0.0, so the reproducibility recorded in M03's teeth row — 30/30 across three runs — was a property of that dataset on that day, not a guarantee. A gate that blocks a pull request on a score diff cannot be built on a suite that moves on its own | One of the two flakes had a cause and now has a fix: the enrichment prompt permitted a null `network` explicitly and said only "a number of minutes" for `runtime`, so on a show recording `runtime: null` and `averageRuntime: 49` it asked for a number and the only number in scope was the wrong field's. Both halves now carry the same clause, pinned by a test. **Three runs of the fixed dataset: 31/31, 31/31, 31/31 — zero case variance, cost within 0.1% ($0.473031 / $0.472941 / $0.472566), adversarial 10/10 each, calibration 9/10 each with the same `judge=pass human=fail` on the near-miss.** The honest caveat, which the three clean runs do not erase: **`airing-schedule-abc-overnight`'s tone failure has no fix and no explanation.** It is an `airing` case on `SERVE_SYSTEM`, untouched by the enrichment change, so it simply has not recurred — one failure in five runs of the curated set. Any gate blocking on a single-case regression carries that residual risk, and M05's block rule has to name it rather than discover it as a red build nobody trusts |
+
 ## M04 AgentCore-migration checklist (per ADR-003)
 
 To be checked at M04 review; each item keeps the Lambda→AgentCore path a
@@ -155,12 +159,34 @@ re-read more charitably.
   spans named `catalog-agent.answer` carrying the exact `gen_ai.*` strings,
   read from the service's log group rather than from X-Ray. ADR-024's claim
   is now measured rather than asserted.
-- The 30 golden cases and 10 probes remain uncurated (M03 curated only the 10
-  calibration samples, at a 20% edit rate).
-- `shows_99999999_episodes.json` — the recorded 404 — is still referenced by no
-  case and no probe.
+- ~~The 30 golden cases and 10 probes remain uncurated (M03 curated only the 10
+  calibration samples, at a 20% edit rate).~~ **Closed 2026-08-11** at the
+  start of M05 — see the curation row below.
+- ~~`shows_99999999_episodes.json` — the recorded 404 — is still referenced by
+  no case and no probe.~~ **Closed 2026-08-11**: it now grounds
+  `airing-missing-show-episodes`, and a test asserts every recorded fixture is
+  graded by at least one case, so the next unused one fails `make check`.
 - The judge's near-miss blind spot (M03) is unfixed and documented as M07
   scope.
+
+### Carried into M05 — resolve or restate at M07's close
+
+- **The adversarial suite tests no tool authorization** (ADR-026). Ten probes
+  cover guardrail, classification, screening and encoding; none reaches Cedar,
+  because the suite calls the gateway and Cedar runs behind the MCP server.
+  The walkthrough's `guarded` act is **not** counted as covering it — that act
+  drives the agent's real path but never asks for a tool the agent does not
+  hold. Stated plainly: **a pull request widening a Cedar policy passes every
+  level of M05's ladder.** Closing it needs an adversarial driver that sends
+  through the agent rather than the gateway; that work is unscheduled.
+
+  *This row exists because ADR-015 promised the probe for M04 with nothing that
+  could turn red when M04 closed without it. A file comment and an ADR
+  paragraph cannot fail. M07's gates require this file to be reviewed and the
+  known limits published, so this is read by a gate rather than by a reader who
+  might. ADR-026's first draft deferred the work to M06 instead — a milestone
+  marked `(stretch)` whose own roadmap entry contemplates shipping without it,
+  which would have repeated the mistake it was written to correct.*
 
 ## Ad-hoc reviews
 
