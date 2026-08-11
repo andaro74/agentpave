@@ -93,7 +93,14 @@ def call_tool(name: str, arguments: dict[str, Any], *, timeout: int = 30) -> str
         raise ToolError(f"tool {name!r} unreachable: {exc}") from exc
 
     if response.status_code != 200:
-        raise ToolError(f"tool {name!r} returned status {response.status_code}")
+        # The body, not just the code. A bare "returned status 403" is the same
+        # sentence whether IAM refused the signature, Cedar denied the tool, or
+        # the server fell over — and it cost M04 two deploy cycles to tell those
+        # apart from the outside. Truncated because a tool server having a bad
+        # day can return a very long apology.
+        raise ToolError(
+            f"tool {name!r} returned status {response.status_code}: {response.text[:300]}"
+        )
 
     return _extract_text(response.text, name)
 
