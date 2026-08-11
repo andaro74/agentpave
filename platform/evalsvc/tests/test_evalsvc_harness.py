@@ -224,6 +224,15 @@ def test_enrichment_is_told_the_schema_it_will_be_graded_against():
     # The null-network case exists because Severance has none; a prompt that
     # did not permit null would push the model to invent one.
     assert "null" in ENRICHMENT_SYSTEM
+    # And the same permission for `runtime`, which is the asymmetry M05's
+    # curation found. `network` carried "or null ... do not guess one" while
+    # `runtime` said only "a number of minutes" — so for a show recording
+    # `runtime: null` and `averageRuntime: 49`, the prompt asked for a number
+    # and the only number in scope was the wrong field's. The deployed run
+    # showed the model obeying it on one run and grounding on the next, which
+    # is a case that flips in a blocking gate for a reason no reader could see.
+    assert ENRICHMENT_SYSTEM.count("or null if the data records none") == 2
+    assert "do not substitute a value from a different field" in ENRICHMENT_SYSTEM
 
 
 def test_enrichment_and_the_other_capabilities_get_different_instructions():
