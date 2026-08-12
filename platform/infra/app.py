@@ -12,6 +12,7 @@ from pathlib import Path
 import aws_cdk as cdk
 from agentpave_infra.log_groups import eval_log_group, gateway_log_group
 from agentpave_infra.stacks.ci_stack import CiStack
+from agentpave_infra.stacks.dashboard_stack import DashboardStack
 from agentpave_infra.stacks.eval_stack import EvalStack
 from agentpave_infra.stacks.gateway_stack import GatewayStack
 from agentpave_infra.stacks.mcp_tvmaze_stack import McpTvmazeStack
@@ -65,6 +66,18 @@ EvalStack(
     f"AgentPave-Eval-{STAGE}",
     log_group_name=EVAL_LOG_GROUP,
     description="AgentPave eval service: baseline score store and scorecard log",
+)
+
+# Observability, in its own stack because it belongs to no single component: it
+# reads the gateway's group and the eval service's, and folding it into either
+# would make one component's stack own a panel about another's.
+DashboardStack(
+    app,
+    f"AgentPave-Dashboard-{STAGE}",
+    stage=STAGE,
+    gateway_log_group=GATEWAY_LOG_GROUP,
+    eval_log_group=EVAL_LOG_GROUP,
+    description="AgentPave dashboard: eval trend, spend, guardrail interventions, leakage",
 )
 
 # The identity GitHub Actions assumes. Not stage-suffixed: an OIDC provider is
