@@ -213,8 +213,23 @@ not derivable from the code.
   it. OIDC role `AgentPave-Ci` deployed, repository variable `AWS_CI_ROLE_ARN`
   set. Third CI run was green end to end.
 - **Phase 3 — dashboard and nightly. Started, not finished.** The gateway now
-  writes one structured line per request (committed). **Everything else is
-  outstanding** — see below.
+  writes one structured line per request, **deployed and verified in
+  CloudWatch** on 2026-08-12: a `make walkthrough` produced both shapes the
+  dashboard needs, in log group
+  `AgentPave-Gateway-dev-GatewayLogGroup423AA6D5-Lxiq3M3ts4oT` —
+
+  ```
+  {"event": "agentpave.gateway.request", ..., "outcome": "served",
+   "model_id": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+   "input_tokens": 604, "output_tokens": 5, "cost_usd": 0.000629}
+  {"event": "agentpave.gateway.request", ..., "outcome": "refused",
+   "stage": "guardrail", "blocked_by": ["contentPolicy:PROMPT_ATTACK"],
+   "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+  ```
+
+  So the Logs Insights queries can be written against real rows rather than
+  against the schema someone intended. **Everything else is outstanding** —
+  see below.
 - **Phase 4 — Act 2. Done.** PR
   [#1](https://github.com/andaro74/agentpave/pull/1) is open and red, with the
   gate's comment on it. Deliberately not merged.
