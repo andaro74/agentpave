@@ -28,6 +28,7 @@ from . import baseline as baseline_mod
 from . import calibration as calibration_mod
 from . import pr_comment as pr_comment_mod
 from . import scorecard as scorecard_mod
+from . import telemetry as telemetry_mod
 from .harness import EVAL_TEMPERATURE, SERVICE_ID, Caller, capped_source, run
 from .judge import JUDGE_FEATURE, JUDGE_SYSTEM, build_judge_content, parse_verdict
 from .models import Baseline, CalibrationSample, Dataset, JudgeVerdict
@@ -38,6 +39,25 @@ def _stack_outputs(stack_name: str) -> dict[str, str]:
 
     stacks = boto3.client("cloudformation").describe_stacks(StackName=stack_name)["Stacks"]
     return {o["OutputKey"]: o["OutputValue"] for o in stacks[0].get("Outputs", [])}
+
+
+def _optional_stack_outputs(stack_name: str) -> dict[str, str]:
+    """Stack outputs, or an empty mapping if the stack is not there.
+
+    The eval stack is resolved on every run now, because it holds the log group
+    the dashboard charts as well as the baseline table. It must not become a
+    precondition for grading: `pave eval` with no flags printed a scorecard on a
+    deployment with no eval stack before M05, and a `ValidationError` from
+    `DescribeStacks` would have quietly made the dashboard's plumbing a
+    requirement of the thing it observes.
+
+    The callers that genuinely need the table still fail closed on the absence —
+    see the `✋ no baseline table` branches below.
+    """
+    try:
+        return _stack_outputs(stack_name)
+    except Exception:  # noqa: BLE001 — a missing stack is a legitimate answer here
+        return {}
 
 
 def _signed_caller(url: str) -> Caller:
@@ -144,6 +164,11 @@ def run_deployed(
         results = tuple(run_probe(probe, call) for probe in dataset.adversarial)
         rendered, passed = adversarial_mod.report(results)
         print(rendered)
+        # No scorecard line from this path, and that is not an oversight: there
+        # is no scorecard. L5 grades the platform's controls and produces no
+        # pass rate or cost for the trend to chart. Its refusals are already in
+        # the gateway's own lines, which is where the guardrail-interventions
+        # panel reads them from.
         return 0 if passed else 1
 
     # Calibration runs before the scorecard is trusted. A judge that failed to
@@ -169,11 +194,25 @@ def run_deployed(
     rendered, probes_passed = adversarial_mod.report(card.probes)
     print(rendered)
 
-    table_name = (
-        _stack_outputs(eval_stack_name).get("BaselineTableName")
-        if (show_diff or save_baseline or pr_comment_path)
-        else None
-    )
+    eval_outputs = _optional_stack_outputs(eval_stack_name)
+    table_name = eval_outputs.get("BaselineTableName")
+
+    # The dashboard's only source. Written on every graded run — passing or
+    # failing — because a trend that dropped its failures would chart a platform
+    # that never regressed (ADR-030).
+    log_group = eval_outputs.get("ScorecardLogGroupName")
+    log_stream = eval_outputs.get("ScorecardLogStreamName")
+    if log_group and log_stream:
+        line = telemetry_mod.scorecard_line(card, run_origin=telemetry_mod.origin())
+        if telemetry_mod.emit(line, log_group=log_group, log_stream=log_stream):
+            print(f"\nwrote the scorecard line to {log_group}")
+    else:
+        # Loud, because the symptom is a flat chart next to a green gate, and
+        # nothing else in the output would hint at the cause.
+        print(
+            "\n! the eval stack published no scorecard log group — this run is "
+            "graded but the dashboard's eval trend will not see it"
+        )
 
     if show_diff:
         if not table_name:
