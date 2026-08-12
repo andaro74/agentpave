@@ -49,6 +49,11 @@ Structured output makes deterministic asserts easy and judge scoring meaningful.
 
 ## 3. Architecture
 
+![AgentPave Architecture Diagram](images/agent-pave-aws-user-friendly-architecture-diagram.png)
+
+#### AWS Diagram
+
+![AgentPave Architecture in AWS](images/agent-pave-architecture-aws-diagram.svg)
 ```
  dev laptop ── pave CLI (scaffolder) ──► service repo ──► GitHub Actions
                                                             │  L0 unit tests
@@ -103,6 +108,8 @@ no long-term memory; one template; one tool; no canary infrastructure —
 `pave shadow-eval` (candidate vs. incumbent on the golden set) stands in.
 
 ## 4. Repo layout (monorepo)
+
+![AgentPave repository structure](images/agent-pave-repo-structure.png)
 
 ```
 agentpave/
