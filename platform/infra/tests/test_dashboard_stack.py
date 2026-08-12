@@ -200,7 +200,7 @@ def test_the_trend_panel_charts_the_pass_rate_over_time(template: Template) -> N
 
 
 def test_the_leakage_panel_admits_it_is_maintained_by_hand(template: Template) -> None:
-    """The panel ADR-030 requires to say so on its face.
+    """The panel ADR-032 requires to say so on its face.
 
     ARCHITECTURE.md §7 Q2 asks what the honest automated trigger for this counter
     would be, and the answer is that there is not one — this platform has no

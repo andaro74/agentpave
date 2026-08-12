@@ -110,8 +110,9 @@ agentpave/
 ├── Makefile                   # the interface: check / deploy-dev / conformance / eval / walkthrough
 ├── .claude/
 │   ├── skills/adr-writer/     # ADR template + tone
-│   ├── skills/eval-case-author/   (arrives M03)
-│   └── skills/gate-report/        (arrives M05)
+│   └── skills/eval-case-author/   (arrives M03)
+│       # gate-report was listed here and is cut — the gate's PR comment is
+│       # rendered by evalsvc/pr_comment.py, and must stay reproducible (ADR-033)
 ├── docs/
 │   ├── ARCHITECTURE.md        # this file — the spec
 │   ├── ROADMAP.md             # milestone build order, two gates each
@@ -139,9 +140,12 @@ gate (`make check`, no AWS) and a deployed gate (human-run after
 ## 6. How Claude Code is used throughout
 
 - **CLAUDE.md as the contract**: conventions, command vocabulary, standing rules.
-- **Custom skills**: `adr-writer` (from M00), `eval-case-author` (M03),
-  `gate-report` (M05) — the same mechanism a full-scale platform's
-  natural-language test creation would use.
+- **Custom skills**: `adr-writer` (from M00) and `eval-case-author` (M03) — the
+  same mechanism a full-scale platform's natural-language test creation would
+  use. Both are *authoring* tools whose output a human curates before it lands.
+  A third, `gate-report`, was planned for M05 and cut for that reason: nobody
+  curates a CI comment, and a gate's explanation of why it blocked has to be
+  byte-reproducible across runs (ADR-033).
 - **Plan mode per milestone**; subagents/parallel worktrees where milestones
   decompose (infra vs. eval harness).
 - **Hooks**: post-edit ruff + targeted pytest; pre-commit block on
@@ -162,7 +166,13 @@ Kept honestly open rather than resolved by fiat; revisited at M07.
 - **Q1:** Should the judge score the *trajectory* (tool choice, step count) in
   this demo, or is answer-level scoring sufficient at one-tool scale? Trajectory
   evals are the full-platform answer; at one tool the signal may be trivial.
-- **Q2:** The defect-leakage counter needs a "prod-detected" increment path.
-  Manual for the demo — what would the honest automated trigger be?
+- ~~**Q2:** The defect-leakage counter needs a "prod-detected" increment path.
+  Manual for the demo — what would the honest automated trigger be?~~
+  **Answered in M05 (ADR-032), by fiat and against this section's own preamble:
+  there is no honest automated trigger, because there is no production.** The
+  counter is incremented by hand and the dashboard panel says so on its face.
+  Deriving it from the gate's own failures is forbidden — a gate that fails is a
+  defect *caught*, and charting that as leakage would make working controls look
+  like escapes.
 - **Q3:** `pave shadow-eval` compares on the golden set only. At what dataset
   size does that stop being a meaningful canary stand-in?

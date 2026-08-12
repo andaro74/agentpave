@@ -34,11 +34,15 @@ from constructs import Construct
 # ── the hand-maintained counter ───────────────────────────────────────────
 #
 # ARCHITECTURE.md §7 Q2 asks what the honest automated trigger for this counter
-# would be. The answer recorded in ADR-030 is that there is not one: this
+# would be. The answer recorded in ADR-032 is that there is not one: this
 # platform has no production, so nothing can detect a defect in production. The
 # number is therefore incremented by a person, and it lives here — in the stack —
 # so that moving it is a reviewed commit with an author and a date rather than an
 # edit in the console that leaves no trace.
+#
+# Deriving it from gate failures is forbidden and not merely discouraged: a gate
+# that fails is a defect *caught*, and charting that as leakage would make the
+# platform's working controls look like escapes (ADR-032).
 #
 # It reads 0 because nothing has leaked, not because nothing is counted. The
 # panel prints that distinction, because a hand-cranked number that looks
@@ -46,11 +50,16 @@ from constructs import Construct
 DEFECTS_LEAKED = 0
 DEFECTS_LEAKED_LAST_REVIEWED = "2026-08-12"
 
-# Enough to hold a run's worth of rows without a query scanning three months of
-# storage every time the page loads. The trend widget overrides it — a fortnight
-# of nightlies is the shortest window in which "trend" means anything.
-DEFAULT_WINDOW = Duration.days(7)
-TREND_WINDOW = Duration.days(14)
+# The window every panel opens on. A fortnight, set by the trend: it is the
+# shortest span in which the word means anything, since a nightly suite produces
+# one point a day. The three gateway panels inherit it and lose nothing — that
+# group keeps a week, so there is nothing behind day seven for them to scan.
+#
+# Not three months, even though the scorecard group retains that long. Logs
+# Insights charges per gigabyte scanned on every page load, so the default window
+# is the one recurring cost this dashboard has (ADR-030). A reader who wants the
+# full quarter widens it in the console, deliberately, once.
+DEFAULT_WINDOW = Duration.days(14)
 
 # Full width, in CloudWatch's 24-column grid.
 FULL = 24
@@ -217,8 +226,9 @@ class DashboardStack(Stack):
                     "it automatically, and nothing can: this platform has no "
                     "production, so there is no such thing here as a defect found "
                     "in production. ARCHITECTURE.md §7 Q2 asked what the honest "
-                    "automated trigger would be — ADR-030 answers that there is "
-                    "not one at this scale.",
+                    "automated trigger would be — ADR-032 answers that there is "
+                    "not one at this scale, and forbids deriving one from the "
+                    "gate's own failures — a gate that fails is a defect caught.",
                     "",
                     f"Last reviewed by a human: **{DEFECTS_LEAKED_LAST_REVIEWED}**. "
                     "A stale review date is the failure mode to watch for; the "
