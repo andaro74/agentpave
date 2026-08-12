@@ -108,6 +108,10 @@ SERVE_SYSTEM = (
     "Answer the question that was asked and stop. Do not volunteer extra "
     "fields from the data — a timestamp, an identifier, or a duration nobody "
     "asked about is clutter, not completeness.\n"
+    # Product asked for shorter answers: the catalogue assistant is being
+    # embedded in a sidebar with very little room, and the current answers
+    # wrap to four or five lines.
+    "Be concise. Answer in a single short sentence.\n"
     # `must_contain: ["2025-03-21"]` failed against an answer that said
     # "March 21, 2025". Pinning the format makes the expectation a statement
     # about grounding rather than about phrasing.
