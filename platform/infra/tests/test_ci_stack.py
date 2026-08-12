@@ -14,12 +14,25 @@ from agentpave_infra.stacks.ci_stack import GITHUB_AUDIENCE, GITHUB_ISSUER, CiSt
 from aws_cdk.assertions import Match, Template
 
 REPOSITORY = "andaro74/agentpave"
+OWNER_ID = 3157440
+REPOSITORY_ID = 1327317546
+# The subject GitHub actually issues, read out of CloudTrail after the first
+# CI run was denied against a policy naming the documented plain form.
+QUALIFIED = f"andaro74@{OWNER_ID}/agentpave@{REPOSITORY_ID}"
 
 
 @pytest.fixture(scope="module")
 def template() -> Template:
     app = cdk.App()
-    return Template.from_stack(CiStack(app, "AgentPave-Ci-test", repository=REPOSITORY))
+    return Template.from_stack(
+        CiStack(
+            app,
+            "AgentPave-Ci-test",
+            repository=REPOSITORY,
+            owner_id=OWNER_ID,
+            repository_id=REPOSITORY_ID,
+        )
+    )
 
 
 def _statements(template: Template) -> list[dict[str, Any]]:
@@ -74,24 +87,39 @@ def test_the_ci_role_cannot_deploy(template: Template) -> None:
 # ── who may assume it ─────────────────────────────────────────────────────
 
 
-def test_only_this_repository_may_assume_the_role(template: Template) -> None:
+def _subjects(template: Template) -> list[str]:
     roles = template.find_resources("AWS::IAM::Role")
     policy = next(iter(roles.values()))["Properties"]["AssumeRolePolicyDocument"]
-    condition = policy["Statement"][0]["Condition"]
-    subjects = condition["StringLike"][f"{GITHUB_ISSUER}:sub"]
-    assert all(sub.startswith(f"repo:{REPOSITORY}:") for sub in subjects)
+    return policy["Statement"][0]["Condition"]["StringLike"][f"{GITHUB_ISSUER}:sub"]
+
+
+def test_the_subjects_carry_githubs_immutable_ids(template: Template) -> None:
+    """The claim GitHub issues, not the one the documentation shows.
+
+    The first CI run was denied `sts:AssumeRoleWithWebIdentity` against a
+    policy naming `repo:andaro74/agentpave:ref:refs/heads/main`. CloudTrail
+    recorded what was actually presented:
+
+        repo:andaro74@3157440/agentpave@1327317546:ref:refs/heads/main
+
+    A login and a repository name can be released and re-registered by someone
+    else; the ids cannot. Trusting only the id form is the stricter reading and
+    the one that works.
+    """
+    for sub in _subjects(template):
+        assert sub.startswith(f"repo:{QUALIFIED}:"), sub
+        assert str(OWNER_ID) in sub
+        assert str(REPOSITORY_ID) in sub
 
 
 def test_the_subject_list_carries_no_wildcard(template: Template) -> None:
-    """`repo:owner/name:*` would also match `ref:refs/tags/*`, so anyone able
-    to push a tag could assume the role. The two subjects are named in full."""
-    roles = template.find_resources("AWS::IAM::Role")
-    policy = next(iter(roles.values()))["Properties"]["AssumeRolePolicyDocument"]
-    subjects = policy["Statement"][0]["Condition"]["StringLike"][f"{GITHUB_ISSUER}:sub"]
+    """A `:*` suffix would also match `ref:refs/tags/*`, so anyone able to push
+    a tag could assume the role. The two subjects are named in full."""
+    subjects = _subjects(template)
     assert not any("*" in sub for sub in subjects)
     assert set(subjects) == {
-        f"repo:{REPOSITORY}:pull_request",
-        f"repo:{REPOSITORY}:ref:refs/heads/main",
+        f"repo:{QUALIFIED}:pull_request",
+        f"repo:{QUALIFIED}:ref:refs/heads/main",
     }
 
 

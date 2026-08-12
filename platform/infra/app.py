@@ -62,6 +62,11 @@ CiStack(
     app,
     "AgentPave-Ci",
     repository=os.environ.get("AGENTPAVE_GITHUB_REPO", "andaro74/agentpave"),
+    # GitHub issues the `sub` claim with immutable numeric ids, so the trust
+    # policy needs them. Read them with:
+    #   gh api repos/<owner>/<name> --jq '{repo_id: .id, owner_id: .owner.id}'
+    owner_id=int(os.environ.get("AGENTPAVE_GITHUB_OWNER_ID", "3157440")),
+    repository_id=int(os.environ.get("AGENTPAVE_GITHUB_REPO_ID", "1327317546")),
     description="AgentPave CI: the role GitHub Actions assumes, no long-lived keys",
 )
 

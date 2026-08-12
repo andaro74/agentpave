@@ -47,6 +47,8 @@ class CiStack(Stack):
         construct_id: str,
         *,
         repository: str,
+        owner_id: int,
+        repository_id: int,
         **kwargs: object,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -63,14 +65,34 @@ class CiStack(Stack):
             thumbprint_list=list(GITHUB_THUMBPRINTS),
         )
 
-        # Which workflows may assume this role. Two subjects rather than
-        # `repo:owner/name:*`, because the wildcard also matches
-        # `environment:` and `ref:refs/tags/*` subjects — anyone who can push a
-        # tag could then assume the role. Pull requests and main are what the
-        # gate and the nightly run on.
+        # Which workflows may assume this role.
+        #
+        # The names carry GitHub's immutable numeric ids, because that is the
+        # `sub` claim GitHub actually issues:
+        #
+        #   repo:andaro74@3157440/agentpave@1327317546:ref:refs/heads/main
+        #
+        # The first CI run was denied with `Not authorized to perform
+        # sts:AssumeRoleWithWebIdentity` against a policy naming the documented
+        # `repo:owner/name:...` form, and the token had never used it. The
+        # claim was read out of CloudTrail, which records the subject presented
+        # rather than the one expected — the only place the two could be
+        # compared.
+        #
+        # The ids are the point rather than an inconvenience: a login and a
+        # repository name can be released and re-registered by someone else,
+        # and an id cannot. Only the id form is trusted here. If GitHub ever
+        # reverts to the plain form the failure is another loud denial, which
+        # is the right direction for this to break in.
+        #
+        # Two subjects rather than a `:*` suffix, because the wildcard also
+        # matches `environment:` and `ref:refs/tags/*` — anyone able to push a
+        # tag could then assume the role.
+        owner, _, name = repository.partition("/")
+        qualified = f"{owner}@{owner_id}/{name}@{repository_id}"
         self.subjects = (
-            f"repo:{repository}:pull_request",
-            f"repo:{repository}:ref:refs/heads/main",
+            f"repo:{qualified}:pull_request",
+            f"repo:{qualified}:ref:refs/heads/main",
         )
 
         self.ci_role = iam.Role(
