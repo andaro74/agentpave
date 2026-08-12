@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import aws_cdk as cdk
+from agentpave_infra.stacks.ci_stack import CiStack
 from agentpave_infra.stacks.eval_stack import EvalStack
 from agentpave_infra.stacks.gateway_stack import GatewayStack
 from agentpave_infra.stacks.mcp_tvmaze_stack import McpTvmazeStack
@@ -51,6 +52,17 @@ EvalStack(
     app,
     f"AgentPave-Eval-{STAGE}",
     description="AgentPave eval service: baseline score store",
+)
+
+# The identity GitHub Actions assumes. Not stage-suffixed: an OIDC provider is
+# an account-level singleton, and a second stage would fail to deploy on the
+# duplicate rather than get its own. The repository is a variable so a fork
+# does not inherit trust for someone else's repo by copying this file.
+CiStack(
+    app,
+    "AgentPave-Ci",
+    repository=os.environ.get("AGENTPAVE_GITHUB_REPO", "andaro74/agentpave"),
+    description="AgentPave CI: the role GitHub Actions assumes, no long-lived keys",
 )
 
 # The scaffolded sample service. Its URLs are wired from the other stacks'
