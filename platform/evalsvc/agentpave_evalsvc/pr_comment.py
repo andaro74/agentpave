@@ -22,6 +22,7 @@ renderer that can regress into unreadability while every test stays green.
 from __future__ import annotations
 
 from .baseline import diff as compute_diff
+from .judge import JUDGE_FAILURE_PREFIX
 from .models import UNRECORDED_MODEL, Baseline, CaseResult, Scorecard
 
 # How the workflow finds its own previous comment to update in place. An
@@ -61,6 +62,17 @@ def _case_line(case: CaseResult) -> list[str]:
         return lines
 
     for failure in case.assert_failures:
+        # The harness records a failing verdict twice over: once as an assert
+        # failure string, and once as the verdict object rendered below. Both
+        # were printed, so the first real blocked pull request carried the
+        # judge's rationale in full, twice, in consecutive lines.
+        #
+        # The golden test did not catch it because its fixture carried a
+        # verdict with no matching assert failure — a shape `run_case` never
+        # produces. A golden file is only as honest as the inputs someone
+        # imagined for it.
+        if failure.startswith(JUDGE_FAILURE_PREFIX):
+            continue
         lines.append(f"  - {failure}")
 
     if case.verdict is not None:

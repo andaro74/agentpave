@@ -38,6 +38,27 @@ JUDGE_FEATURE = "judge"
 # groundedness and fine on tone, and a mean would let tone buy the pass.
 PASS_THRESHOLD = 4
 
+
+def judge_failure(verdict: JudgeVerdict) -> str:
+    """How a failing verdict is written into a case's `assert_failures`.
+
+    One function rather than an f-string at the call site, because two things
+    depend on the exact shape: `harness.run_case` writes it, and
+    `pr_comment` filters it out so the rationale is not printed twice — once as
+    this string and once from the verdict object. They drifted apart the moment
+    there were two of them, and the duplicate reached the first pull request
+    the gate ever blocked.
+    """
+    return (
+        f"{JUDGE_FAILURE_PREFIX}{verdict.groundedness} "
+        f"completeness={verdict.completeness} tone={verdict.tone} — {verdict.rationale}"
+    )
+
+
+# The prefix `pr_comment` matches on. Kept beside the writer so a change to one
+# is a change to the other.
+JUDGE_FAILURE_PREFIX = "judge: groundedness="
+
 JUDGE_SYSTEM = """\
 You are grading one answer produced by a TV-catalogue assistant.
 
