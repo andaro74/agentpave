@@ -7,12 +7,23 @@
 ## Context
 
 ROADMAP M05 names the hermetic gate as "workflow lints (`actionlint`)".
-`actionlint` is a Go binary. `make check` is required to pass on a clean clone
-with `uv` and nothing else (CLAUDE.md standing rule: the hermetic gate needs no
-AWS account, and by extension no toolchain the repo does not declare).
+`actionlint` is a Go binary.
 
-Adding `actionlint` to `make check` therefore has three shapes, and two of them
-are worse than not having it:
+The first draft of this ADR justified keeping it out of `make check` by
+claiming the hermetic gate "must pass on a clean clone with `uv` and nothing
+else". **That was false when it was written**, and the gate's own first CI run
+proved it within the hour: `make check` ends in `cdk synth`, the runner had no
+Node, and it failed with `cdk: command not found` three lines after 603 tests
+passed. CLAUDE.md's "no AWS account needed" had been read — by me, writing an
+ADR — as "no toolchain needed", which it never said.
+
+So the real question is narrower and less flattering: `make check` already
+requires one undeclared toolchain, and this is about whether to add a second.
+It is recorded this way because the tidier version of the reasoning was
+disproved by the thing it was reasoning about.
+
+Adding `actionlint` to `make check` has three shapes, and two of them are worse
+than not having it:
 
 - **Require it.** `make check` fails on every machine without a Go binary
   nobody was told to install, including the first clone of a reader following
@@ -42,11 +53,15 @@ whether the gate fails closed. The structural tests verify the gate's
 behaviour; they would happily pass on a file GitHub refuses to parse. Both run
 on every pull request; one of them also runs on a laptop.
 
+**The toolchain `make check` does need is now stated by `make check`.** The
+`synth` target checks for the CDK CLI first and prints how to install it, so
+the next person meets an instruction rather than exit 127.
+
 ## Consequences
 
-`make check` stays true to its claim — clean clone, `uv`, no network beyond
-localhost, no undeclared toolchain — and it gains the workflow assertions that
-matter most for this milestone.
+`make check` gains the workflow assertions that matter most for this milestone
+without adding a third toolchain to a gate that already carries two — `uv` and
+Node — and it now names the second instead of assuming it.
 
 The cost is that a workflow syntax error is caught one step later than the
 ROADMAP intended: on the pull request rather than before the push. For a file

@@ -48,6 +48,17 @@ jobs:
         with:
           enable-cache: true
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the CDK CLI
+        # `make check` ends in `cdk synth`, which is a Node package. The first
+        # CI run failed here with `cdk: command not found` — the gate's own
+        # first execution finding that the hermetic gate was never as
+        # self-contained as it claimed (ADR-029).
+        run: npm install --global aws-cdk@2
+
       - name: Run the hermetic levels
         run: uv run pave gate --hermetic
 

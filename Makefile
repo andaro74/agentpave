@@ -35,6 +35,16 @@ synth: ## Synthesise CloudFormation from the CDK app — no AWS account needed
 	@# Credentials are cleared deliberately: synth that needs an account is
 	@# synth that will fail in CI. The IAM assertions themselves live in
 	@# platform/infra/tests/ and run under pytest above.
+	@#
+	@# The precondition is here because the first CI run failed with
+	@# `cdk: command not found` and exit 127, three lines below a green run of
+	@# 603 tests. "No AWS account needed" was true and read as "nothing else
+	@# needed", which was not — this target needs Node and the CDK CLI, and now
+	@# says so instead of failing as an errno.
+	@command -v cdk >/dev/null || { \
+		echo "✋ the CDK CLI is not on PATH — 'make check' ends in 'cdk synth'"; \
+		echo "   install it with: npm install --global aws-cdk@2"; \
+		exit 1; }
 	AWS_PROFILE= AWS_REGION= cdk synth --quiet
 
 .PHONY: diagrams
