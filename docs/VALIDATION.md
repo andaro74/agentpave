@@ -43,6 +43,8 @@ CI runs the hermetic gates; a human runs everything below.
 
 | 2026-08-12 | M05 | hermetic | Phase 3 built: the dashboard stack, the eval scorecard line, and the CI role's one new grant — `make check` 642 tests, ruff, `cdk synth` over six stacks | Green, and the interesting finding is why the queries are written the way they are. **The handoff's real rows and the intended schema are different documents, and only one of them is queryable.** `blocked_by` is a JSON *array* in the deployed line, so Logs Insights addresses it as `blocked_by.0`; a widget naming the bare field renders a column of blanks and looks exactly like a period with no refusals. Building the panels against the rows quoted in the handoff rather than against `telemetry.py`'s docstring is what caught it, and a test now carries the real row next to the assertion. Two smaller ones found while building: `TREND_WINDOW` was declared, never applied, and described by a comment claiming the trend widget overrode the dashboard default — an untrue comment about a constant nothing read, so the default became a fortnight for every panel instead; and `pave eval` had to stop treating the eval stack as optional-by-omission, since it now resolves the log group there on every run, which must not turn a missing eval stack into a `ValidationError` where grading used to work | Four ADRs rather than the one planned. **030** logs-never-metrics, with the cost stated plainly: no metrics means no alarms, so nothing in this platform can page anybody, and the trend cannot reach further back than retention. **031** log groups named by the app — the option chosen because the two alternatives fail *silently* (a cross-stack import pins the gateway alive; a forgotten environment variable deploys clean and renders four empty widgets, which is M04's failure shape twice over). **032** the leakage counter, answering ARCHITECTURE §7 Q2 by fiat: no production means no honest trigger, deriving one from gate failures is forbidden because a gate that fails is a defect *caught*, and the panel must admit on its face that a person maintains it. **033** `gate-report` cut. The handoff promised Q2 would be answered in ADR-030; it is answered in 032 instead, because the adr-writer skill's own rule is one decision per ADR — noted here so the promise is traceable rather than quietly renumbered. The dashboard's failure mode is invisibility, so the tests do the looking: every query must filter on its event marker, the leakage panel must contain its own admission, and the drift test synthesises the producers and the dashboard together and asserts the groups queried are the groups created |
 
+| 2026-08-12 | M05 | deployed | The dashboard opened by a human — two of the four panels read, and one of them was wrong | **`sum(cost_usd) as cost_usd` renders an empty column.** The spend panel showed `requests` populated and `input_tokens`, `output_tokens` and `cost_usd` all blank beside it: `count() as requests` introduces a new name, while an aggregate aliased to the field it reads is a self-reference Logs Insights does not resolve. The second symptom was the tell — `sort cost_usd desc` on a blank column ordered the table arbitrarily, putting `judge` fifth of six rows despite being 33 of 76 requests and by far the most expensive, since Sonnet judges. **Nothing hermetic could have caught it.** Every existing assertion was about what the query *says*, and it said everything correctly: it filtered on the marker, grouped by `service_id`, and named `sum(cost_usd)`. A Logs Insights query can be syntactically valid, correct in every clause a test can name, and still render nothing — which is the failure class this dashboard was always going to have, and the reason a human opening the page is a gate rather than a formality | Aliases renamed to `tokens_in`, `tokens_out`, `spend_usd`. Two guards added and both mutation-checked against the exact form that shipped: one forbids the self-aliasing pattern in any query, one requires every sort key to name a column the query produces. **The refusal panel's blanks are not a defect and were left alone** — `classification` and `screening` refusals carry no `blocked_by` (only `guardrail` does), so an empty filter column on those two rows is the truth about them, and grouping by `stage` is what keeps them legible. That panel is confirmed working: 7 refusals at `contentPolicy:PROMPT_ATTACK`, 2 classification, 2 screening. **Still unread: the eval trend and the leakage panel**, and the dashboard needs `cdk deploy AgentPave-Dashboard-dev` to pick up the fix — the log data is already in place, so no eval re-run is needed |
+
 ## M04 AgentCore-migration checklist (per ADR-003)
 
 To be checked at M04 review; each item keeps the Lambda→AgentCore path a
@@ -275,11 +277,14 @@ definition of done asks for a witness who is not the agent that wrote the fix:
 3. `make eval` — writes the first scorecard line. Watch for
    `wrote the scorecard line to /agentpave/dev/eval`; the alternative message
    names the group and stream it tried.
-4. Open `AgentPave-dev` in CloudWatch and check all four panels. **The three
-   query panels have never been run against real data** — they are validated by
-   synth assertions and by the row shapes in this file, which is not the same as
-   having returned a row. Validate each with `aws logs start-query` if a panel
-   looks wrong before assuming the data is missing.
+4. Open `AgentPave-dev` in CloudWatch and check all four panels. **Partly done
+   2026-08-12** — see the row above. The spend and refusal panels have been read
+   and the spend panel was wrong; the fix needs
+   `cdk deploy AgentPave-Dashboard-dev`, which is cheap and needs no eval re-run
+   because the rows are already in the group. **The eval trend has still never
+   been read.** Validate any suspect panel with `aws logs start-query` before
+   assuming the data is missing — an empty table and a wrong query look
+   identical, which is exactly how the spend panel failed.
 5. `gh workflow run nightly-eval.yml`, then confirm the trend gains a point with
    `origin: "nightly eval"`. Real spend: an eval run is ~$0.47 plus judge calls.
 
@@ -310,14 +315,16 @@ definition of done asks for a witness who is not the agent that wrote the fix:
   it as a stretch milestone, which is consistent — but the decision to keep it
   was made in conversation and is recorded nowhere else until this line.
 
-- **The dashboard's own panels are the thing least verified in this milestone.**
-  Every other claim here has been run: the gate blocked, the comment posted, the
-  baseline seeded, the spans read out of a log group. The three query panels have
-  only ever been asserted at synth. A Logs Insights query that is syntactically
-  fine and semantically wrong returns an empty table, and an empty table is what
-  a quiet week looks like — so a panel cannot be trusted until it has returned a
-  row somebody recognised. Until step 4 above is done, treat "the dashboard
-  works" as untested.
+- **The dashboard's own panels were the thing least verified in this milestone,
+  and the first look found a defect.** Every other claim here had been run: the
+  gate blocked, the comment posted, the baseline seeded, the spans read out of a
+  log group. The three query panels had only been asserted at synth — and the
+  spend panel was wrong in a way no synth assertion could reach (see the
+  2026-08-12 deployed row). Two of three query panels have now returned rows
+  somebody recognised; **the eval trend has not**, so treat it as untested. The
+  general lesson is cheap to state and was expensive to learn twice in one day:
+  for a Logs Insights panel, "the query is correct" and "the query returns what
+  you meant" are different claims, and only the second one is worth anything.
 
 ### Before M05 can close
 
