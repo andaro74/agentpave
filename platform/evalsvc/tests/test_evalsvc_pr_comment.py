@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from agentpave_evalsvc.judge import JUDGE_FAILURE_PREFIX, judge_failure
 from agentpave_evalsvc.models import (
     Baseline,
     CaseResult,
@@ -75,6 +76,16 @@ BLOCKED_CARD = _card(
             "airing-schedule-abc-overnight",
             "airing",
             False,
+            # Both, because `run_case` records both: the verdict object *and*
+            # an assert-failure string restating it. The first version of this
+            # fixture carried only the verdict — a shape the harness never
+            # produces — so the golden file was approved against a comment that
+            # could not occur, and the duplicate rationale reached a real pull
+            # request before anything noticed.
+            failures=(
+                "judge: groundedness=5 completeness=5 tone=3 — includes unnecessary "
+                "technical detail (airstamp in UTC) that adds little value",
+            ),
             verdict=JudgeVerdict(
                 groundedness=5,
                 completeness=5,
@@ -134,6 +145,31 @@ def test_the_judges_own_words_reach_the_reader():
     """The rationale is the most persuasive thing the platform produces, and it
     was already recorded — the terminal renderer just never printed it."""
     assert "airstamp in UTC" in render(BLOCKED_CARD, BASELINE)
+
+
+def test_the_judges_rationale_appears_exactly_once():
+    """`run_case` records a failing verdict twice — as an assert-failure string
+    and as the verdict object — and this renderer printed both.
+
+    The first pull request the gate ever blocked carried the rationale in full,
+    twice, in consecutive lines. Caught by reading the comment on a real pull
+    request, which is the only place it had ever been rendered from a scorecard
+    the harness actually produced.
+    """
+    rendered = render(BLOCKED_CARD, BASELINE)
+    assert rendered.count("airstamp in UTC") == 1
+
+
+def test_the_prefix_this_renderer_filters_is_the_one_the_writer_writes():
+    """Asserted against the writer, not re-typed from it.
+
+    The first version of this test rebuilt the string with its own f-string,
+    which would have gone on passing after the writer changed — a pin that
+    holds nothing. `judge_failure` is now the one place the shape lives, and
+    both the harness and this filter read from it.
+    """
+    written = judge_failure(JudgeVerdict(groundedness=1, completeness=1, tone=1, rationale="no"))
+    assert written.startswith(JUDGE_FAILURE_PREFIX)
 
 
 def test_a_first_run_says_there_is_no_baseline_rather_than_diffing_against_nothing():

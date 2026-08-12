@@ -31,6 +31,7 @@ from .judge import (
     JUDGE_SYSTEM,
     JudgeError,
     build_judge_content,
+    judge_failure,
     parse_verdict,
     verdict_passes,
 )
@@ -293,11 +294,7 @@ def run_case(case: GoldenCase, call: Caller, source: str) -> CaseResult:
                 cost_usd += judge_cost
                 verdict = parse_verdict(judge_answer)
                 if not verdict_passes(verdict):
-                    failures.append(
-                        f"judge: groundedness={verdict.groundedness} "
-                        f"completeness={verdict.completeness} tone={verdict.tone} "
-                        f"— {verdict.rationale}"
-                    )
+                    failures.append(judge_failure(verdict))
         except JudgeError as exc:
             failures.append(f"judge reply unusable: {exc}")
         except Exception as exc:  # noqa: BLE001 — an unjudgeable case fails
