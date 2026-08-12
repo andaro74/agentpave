@@ -20,11 +20,13 @@ import json
 import time
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from . import adversarial as adversarial_mod
 from . import baseline as baseline_mod
 from . import calibration as calibration_mod
+from . import pr_comment as pr_comment_mod
 from . import scorecard as scorecard_mod
 from .harness import EVAL_TEMPERATURE, SERVICE_ID, Caller, capped_source, run
 from .judge import JUDGE_FEATURE, JUDGE_SYSTEM, build_judge_content, parse_verdict
@@ -123,6 +125,7 @@ def run_deployed(
     show_diff: bool = False,
     save_baseline: bool = False,
     adversarial_only: bool = False,
+    pr_comment_path: str | None = None,
 ) -> int:
     """`pave eval` against the deployed stack. Returns a process exit code."""
     outputs = _stack_outputs(stack_name)
@@ -168,7 +171,7 @@ def run_deployed(
 
     table_name = (
         _stack_outputs(eval_stack_name).get("BaselineTableName")
-        if (show_diff or save_baseline)
+        if (show_diff or save_baseline or pr_comment_path)
         else None
     )
 
@@ -182,6 +185,21 @@ def run_deployed(
             print("score diff: no baseline recorded yet — nothing to compare against")
         else:
             print(baseline_mod.render(baseline_mod.diff(card, previous)))
+
+    if pr_comment_path:
+        if not table_name:
+            print("\n✋ no baseline table — is the eval stack deployed?")
+            return 1
+        # UTF-8 pinned, not left to the platform. The comment carries ✅, ❌,
+        # `—` and `Δ`, and on a Windows runner defaulting to cp1252 the write
+        # dies partway through — the same UnicodeEncodeError `_force_utf8_output`
+        # exists for, and the one `curate.py` hit on its first run. A gate whose
+        # comment fails to write is a gate that blocks with no explanation.
+        Path(pr_comment_path).write_text(
+            pr_comment_mod.render(card, baseline_mod.latest_baseline(table_name)),
+            encoding="utf-8",
+        )
+        print(f"\nwrote pull-request comment to {pr_comment_path}")
 
     if save_baseline:
         if not table_name:

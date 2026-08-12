@@ -106,6 +106,17 @@ def _build_parser() -> argparse.ArgumentParser:
         help="run only the adversarial mini-suite",
     )
     evaluate.add_argument(
+        "--pr-comment",
+        default=None,
+        metavar="PATH",
+        help=(
+            "write the gate's pull-request comment to PATH as markdown. Written "
+            "to a file rather than stdout because the workflow posts it verbatim, "
+            "and a comment assembled from scraped log output is a comment that "
+            "changes shape the first time anything else prints"
+        ),
+    )
+    evaluate.add_argument(
         "--dataset",
         default=None,
         metavar="DIR",
@@ -155,6 +166,7 @@ def _run_eval(args: argparse.Namespace) -> int:
         show_diff=args.diff,
         save_baseline=args.save_baseline,
         adversarial_only=args.adversarial_only,
+        pr_comment_path=args.pr_comment,
     )
 
 
