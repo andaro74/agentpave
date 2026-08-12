@@ -196,6 +196,81 @@ re-read more charitably.
   marked `(stretch)` whose own roadmap entry contemplates shipping without it,
   which would have repeated the mistake it was written to correct.*
 
+## M05 status — where the milestone stands
+
+Written as a handoff. The rows above record what was found; this records what
+is done, what is not, and what someone picking this up needs to know that is
+not derivable from the code.
+
+### Phases
+
+- **Phase 1 — curate and seed the baseline. Done.** 31 golden cases, 10
+  calibration samples, 10 probes, all 5 fixtures graded. Baseline
+  `eval-1786459419-6aaf90` at 31/31, $0.471934. `make seed-baseline` is
+  implemented and is the only way the bar moves.
+- **Phase 2 — the gate in CI. Done and green.** `pave gate` runs the ladder
+  from a `gate.yml`; `.github/workflows/gate.yml` and `nightly-eval.yml` call
+  it. OIDC role `AgentPave-Ci` deployed, repository variable `AWS_CI_ROLE_ARN`
+  set. Third CI run was green end to end.
+- **Phase 3 — dashboard and nightly. Started, not finished.** The gateway now
+  writes one structured line per request (committed). **Everything else is
+  outstanding** — see below.
+- **Phase 4 — Act 2. Done.** PR
+  [#1](https://github.com/andaro74/agentpave/pull/1) is open and red, with the
+  gate's comment on it. Deliberately not merged.
+
+### What Phase 3 still needs
+
+1. A log group in `EvalStack` for scorecard lines, and `pave eval` writing one.
+   Without it the dashboard's **eval trend** panel has no source: the eval runs
+   on a GitHub runner, so its scores reach CloudWatch only if it puts them
+   there.
+2. The CI role gaining `logs:PutLogEvents` **on that group alone**. It must not
+   gain `dynamodb:PutItem` — ADR-027 is what stops a CI run recording itself as
+   the new bar, and that property is the reason the role exists in its current
+   shape.
+3. The dashboard stack: Logs Insights widgets for eval trend, tokens/cost per
+   service, guardrail interventions, and the defect-leakage counter.
+4. **ADR-030**, recording logs-not-custom-metrics as a deliberate ADR-002
+   decision, and answering ARCHITECTURE §7's open **Q2** by fiat: the
+   defect-leakage counter is incremented by hand, because this platform has no
+   production and therefore no honest automated "prod detected a defect"
+   trigger. The dashboard must say so on its face — a hand-cranked number that
+   looks measured is worse than an empty panel.
+5. The nightly has **never fired**. It is scheduled for 09:00 UTC and is
+   `workflow_dispatch`-able; running it by hand is the cheaper way to find out
+   whether it works than waiting a day.
+
+### Open threads a new session will not infer
+
+- **`.claude/skills/gate-report/` does not exist.** ARCHITECTURE §4 lists it as
+  arriving in M05. It is not clear what it would do that `pr_comment.py` does
+  not. Build it or cut it with an ADR; do not leave it listed and absent.
+- **The `airing-schedule-abc-overnight` tone flake has no explanation.** It
+  failed once in five runs on tone=3 with groundedness and completeness at 5. A
+  prompt clause was added and six consecutive runs have been clean — but at the
+  observed rate, six clean runs would happen about a quarter of the time even
+  if the clause did nothing. It is a plausible fix, not a proven one. If it
+  reddens a gate later, the next move is not another prompt tweak: it is
+  deciding whether a stylistic axis should block a pull request at all.
+- **ADR-028's path filter leaks on `templates/`.** A template edit can change
+  how a scaffolded service asks its question, which can move that service's
+  scores, and `templates/` is outside the filter — so it ships ungraded.
+  Nothing enforces that whoever widens the template widens the filter.
+- **The adversarial suite tests no tool authorization** (ADR-026). A pull
+  request widening a Cedar policy passes every level of this ladder. M07's
+  close must resolve it or restate it in the README's known limits.
+- **M06 stays** (decided 2026-08-12). ADR-001 and ARCHITECTURE still describe
+  it as a stretch milestone, which is consistent — but the decision to keep it
+  was made in conversation and is recorded nowhere else until this line.
+
+### Before M05 can close
+
+Both gates green, ADRs written (026–030, with 030 outstanding), the deployed
+gate **run by a human rather than by an agent**, this file updated, and an
+`M05` tag. Act 2 is demonstrated but was driven by the agent; a human still has
+to look at PR #1 and the dashboard and say they work.
+
 ## Ad-hoc reviews
 
 *(none yet)*
