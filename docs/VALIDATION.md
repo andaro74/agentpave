@@ -41,6 +41,8 @@ CI runs the hermetic gates; a human runs everything below.
 
 | 2026-08-12 | M05 | deployed | **Act 2** — the demo pull request ([#1](https://github.com/andaro74/agentpave/pull/1)), left red in history | Two attempts, and the first one is the finding. **"Be concise. Answer in a single short sentence" scored 31/31, +0.0% on every capability, and the gate let it through.** That is the gate being right rather than blind: every fact the golden set grades was still present, the answers were shorter and no less grounded, and a gate that reddened on it would be measuring prose length. It is worth stating because the ROADMAP names "a *be more concise* prompt change" as the thing that gets blocked, and it turns out concision alone is not a quality regression. **The second attempt — "a headline, not a sentence: at most eight words" — blocked at 29/31, −6.5%.** Eight words cannot carry two facts, and the drop was targeted rather than diffuse: `airing` −11.1%, `running` −16.7%, while `summarize` and `enrichment` held at 100%. Enrichment holding is the tell — it answers through `ENRICHMENT_SYSTEM`, which the change never touched. The judge named the failure in its own words: *"The question also asked whether the show is still running, which the answer fails to address properly."* Both attempts passed `make check` — 603 tests, ruff, `cdk synth` — because nothing hermetic can see how long an answer is, which is the entire reason the eval level exists | **The comment carried the judge's rationale twice.** `run_case` records a failing verdict two ways — as an assert-failure string and as the verdict object — and the renderer printed both, so the most persuasive output this platform produces arrived doubled on the one artifact it was written for. The golden test could not have caught it: its fixture carried a verdict with *no* matching assert failure, a shape the harness never produces, so the approved file was approved against a comment that cannot occur. A golden file is only as honest as the inputs whoever wrote the renderer imagined. Fixed at the cause — the string now lives in `judge.judge_failure`, read by both the writer and the filter — and the fixture now carries both, with a test asserting the rationale appears exactly once. The first version of *that* test rebuilt the string with its own f-string and would have kept passing after the writer changed, which is the same defect one level up. **What Act 2 proves, now that all three paths have run: the gate blocks on a regression no hermetic test can see; the comment posts; and it updates in place — one comment across three runs, not three.** The pull request stays open and red |
 
+| 2026-08-12 | M05 | hermetic | Phase 3 built: the dashboard stack, the eval scorecard line, and the CI role's one new grant — `make check` 642 tests, ruff, `cdk synth` over six stacks | Green, and the interesting finding is why the queries are written the way they are. **The handoff's real rows and the intended schema are different documents, and only one of them is queryable.** `blocked_by` is a JSON *array* in the deployed line, so Logs Insights addresses it as `blocked_by.0`; a widget naming the bare field renders a column of blanks and looks exactly like a period with no refusals. Building the panels against the rows quoted in the handoff rather than against `telemetry.py`'s docstring is what caught it, and a test now carries the real row next to the assertion. Two smaller ones found while building: `TREND_WINDOW` was declared, never applied, and described by a comment claiming the trend widget overrode the dashboard default — an untrue comment about a constant nothing read, so the default became a fortnight for every panel instead; and `pave eval` had to stop treating the eval stack as optional-by-omission, since it now resolves the log group there on every run, which must not turn a missing eval stack into a `ValidationError` where grading used to work | Four ADRs rather than the one planned. **030** logs-never-metrics, with the cost stated plainly: no metrics means no alarms, so nothing in this platform can page anybody, and the trend cannot reach further back than retention. **031** log groups named by the app — the option chosen because the two alternatives fail *silently* (a cross-stack import pins the gateway alive; a forgotten environment variable deploys clean and renders four empty widgets, which is M04's failure shape twice over). **032** the leakage counter, answering ARCHITECTURE §7 Q2 by fiat: no production means no honest trigger, deriving one from gate failures is forbidden because a gate that fails is a defect *caught*, and the panel must admit on its face that a person maintains it. **033** `gate-report` cut. The handoff promised Q2 would be answered in ADR-030; it is answered in 032 instead, because the adr-writer skill's own rule is one decision per ADR — noted here so the promise is traceable rather than quietly renumbered. The dashboard's failure mode is invisibility, so the tests do the looking: every query must filter on its event marker, the leakage panel must contain its own admission, and the drift test synthesises the producers and the dashboard together and asserts the groups queried are the groups created |
+
 ## M04 AgentCore-migration checklist (per ADR-003)
 
 To be checked at M04 review; each item keeps the Lambda→AgentCore path a
@@ -212,11 +214,14 @@ not derivable from the code.
   from a `gate.yml`; `.github/workflows/gate.yml` and `nightly-eval.yml` call
   it. OIDC role `AgentPave-Ci` deployed, repository variable `AWS_CI_ROLE_ARN`
   set. Third CI run was green end to end.
-- **Phase 3 — dashboard and nightly. Started, not finished.** The gateway now
-  writes one structured line per request, **deployed and verified in
-  CloudWatch** on 2026-08-12: a `make walkthrough` produced both shapes the
-  dashboard needs, in log group
-  `AgentPave-Gateway-dev-GatewayLogGroup423AA6D5-Lxiq3M3ts4oT` —
+- **Phase 3 — dashboard and nightly. Built hermetically; not yet deployed.**
+  Everything in the list below is written, tested and committed; nothing in it
+  has run against AWS. The gateway's structured line was **deployed and verified
+  in CloudWatch** on 2026-08-12, in a log group that no longer exists — ADR-031
+  renamed it to `/agentpave/dev/gateway`, which replaces the group and discards
+  the rows. The schema they proved is unchanged and the queries were written
+  against them, so the evidence did its job before it expired; the deployed gate
+  refills both groups. The rows, for the record —
 
   ```
   {"event": "agentpave.gateway.request", ..., "outcome": "served",
@@ -227,40 +232,66 @@ not derivable from the code.
    "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
   ```
 
-  So the Logs Insights queries can be written against real rows rather than
-  against the schema someone intended. **Everything else is outstanding** —
-  see below.
+  Which was worth having: `blocked_by` is an **array**, so the refusal panel
+  addresses it as `blocked_by.0`. Written against the intended schema instead,
+  that widget would have rendered a column of blanks and read as a period with
+  no refusals.
 - **Phase 4 — Act 2. Done.** PR
   [#1](https://github.com/andaro74/agentpave/pull/1) is open and red, with the
   gate's comment on it. Deliberately not merged.
 
-### What Phase 3 still needs
+### What Phase 3 needed — done hermetically, 2026-08-12
 
-1. A log group in `EvalStack` for scorecard lines, and `pave eval` writing one.
-   Without it the dashboard's **eval trend** panel has no source: the eval runs
-   on a GitHub runner, so its scores reach CloudWatch only if it puts them
-   there.
-2. The CI role gaining `logs:PutLogEvents` **on that group alone**. It must not
-   gain `dynamodb:PutItem` — ADR-027 is what stops a CI run recording itself as
-   the new bar, and that property is the reason the role exists in its current
-   shape.
-3. The dashboard stack: Logs Insights widgets for eval trend, tokens/cost per
-   service, guardrail interventions, and the defect-leakage counter.
-4. **ADR-030**, recording logs-not-custom-metrics as a deliberate ADR-002
-   decision, and answering ARCHITECTURE §7's open **Q2** by fiat: the
-   defect-leakage counter is incremented by hand, because this platform has no
-   production and therefore no honest automated "prod detected a defect"
-   trigger. The dashboard must say so on its face — a hand-cranked number that
-   looks measured is worse than an empty panel.
-5. The nightly has **never fired**. It is scheduled for 09:00 UTC and is
-   `workflow_dispatch`-able; running it by hand is the cheaper way to find out
-   whether it works than waiting a day.
+1. ~~A log group in `EvalStack` for scorecard lines, and `pave eval` writing
+   one.~~ **Done.** `/agentpave/dev/eval`, three-month retention, with a
+   pre-created `scorecards` stream. `evalsvc/telemetry.py` writes one flat line
+   per graded run — summary numbers only, no answers or case ids — and reports
+   a failed write loudly without changing the run's exit code.
+2. ~~The CI role gaining `logs:PutLogEvents` on that group alone.~~ **Done**, and
+   narrower than asked: the grant names the one *stream*, not the group, and
+   deliberately withholds `logs:CreateLogStream` — which is why `EvalStack`
+   creates the stream. `dynamodb:PutItem` is still absent, with tests asserting
+   the role also cannot delete a log stream: erasing the run that scored badly
+   is the same laundering as writing a baseline, reached another way.
+3. ~~The dashboard stack.~~ **Done.** One dashboard, four panels, no custom
+   metrics (ADR-030).
+4. ~~**ADR-030**.~~ **Done, as four ADRs — 030 through 033.** Q2 is answered in
+   **ADR-032**, not 030; see the row above for why the split, so the handoff's
+   promise is traceable rather than silently renumbered.
+5. The nightly has **still never fired.** Unchanged from the previous handoff,
+   and now the only Phase 3 item with no code behind it — it needs a deployed
+   stack and a `workflow_dispatch`.
+
+### What is left, and it is all deployed work
+
+None of Phase 3 has run against AWS. In order, and **by a human** — the
+definition of done asks for a witness who is not the agent that wrote the fix:
+
+1. `make deploy-dev`. This **replaces** the gateway log group (ADR-031) and
+   creates `AgentPave-Dashboard-dev`. Expect CloudFormation to delete the old
+   group; that is the rename, not a fault.
+2. `make walkthrough` — refills `/agentpave/dev/gateway` with both row shapes,
+   served and refused, so the spend and guardrail panels have data.
+3. `make eval` — writes the first scorecard line. Watch for
+   `wrote the scorecard line to /agentpave/dev/eval`; the alternative message
+   names the group and stream it tried.
+4. Open `AgentPave-dev` in CloudWatch and check all four panels. **The three
+   query panels have never been run against real data** — they are validated by
+   synth assertions and by the row shapes in this file, which is not the same as
+   having returned a row. Validate each with `aws logs start-query` if a panel
+   looks wrong before assuming the data is missing.
+5. `gh workflow run nightly-eval.yml`, then confirm the trend gains a point with
+   `origin: "nightly eval"`. Real spend: an eval run is ~$0.47 plus judge calls.
 
 ### Open threads a new session will not infer
 
-- **`.claude/skills/gate-report/` does not exist.** ARCHITECTURE §4 lists it as
-  arriving in M05. It is not clear what it would do that `pr_comment.py` does
-  not. Build it or cut it with an ADR; do not leave it listed and absent.
+- ~~**`.claude/skills/gate-report/` does not exist.**~~ **Closed 2026-08-12: cut,
+  with ADR-033.** `pr_comment.py` renders the comment from pure data with a
+  golden-output test, and a gate's explanation of why it blocked has to be
+  byte-identical across runs — a blocked developer reads it twice, once when it
+  fails and once after the fix. The two surviving skills are authoring tools
+  whose output a human curates before it lands; nobody curates a CI comment.
+  ARCHITECTURE §4 and §6 updated so nothing is listed and absent.
 - **The `airing-schedule-abc-overnight` tone flake has no explanation.** It
   failed once in five runs on tone=3 with groundedness and completeness at 5. A
   prompt clause was added and six consecutive runs have been clean — but at the
@@ -279,12 +310,23 @@ not derivable from the code.
   it as a stretch milestone, which is consistent — but the decision to keep it
   was made in conversation and is recorded nowhere else until this line.
 
+- **The dashboard's own panels are the thing least verified in this milestone.**
+  Every other claim here has been run: the gate blocked, the comment posted, the
+  baseline seeded, the spans read out of a log group. The three query panels have
+  only ever been asserted at synth. A Logs Insights query that is syntactically
+  fine and semantically wrong returns an empty table, and an empty table is what
+  a quiet week looks like — so a panel cannot be trusted until it has returned a
+  row somebody recognised. Until step 4 above is done, treat "the dashboard
+  works" as untested.
+
 ### Before M05 can close
 
-Both gates green, ADRs written (026–030, with 030 outstanding), the deployed
-gate **run by a human rather than by an agent**, this file updated, and an
-`M05` tag. Act 2 is demonstrated but was driven by the agent; a human still has
-to look at PR #1 and the dashboard and say they work.
+Both gates green, ADRs written (**026–033, all written**), the deployed gate
+**run by a human rather than by an agent**, this file updated, and an `M05` tag.
+Act 2 is demonstrated but was driven by the agent; a human still has to look at
+PR #1 and the dashboard and say they work. Phase 3's deployed sequence — the five
+steps above, starting with a `make deploy-dev` that replaces a log group — has
+not been run at all.
 
 ## Ad-hoc reviews
 
