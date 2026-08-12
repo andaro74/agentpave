@@ -110,8 +110,9 @@ SERVE_SYSTEM = (
     "asked about is clutter, not completeness.\n"
     # Product asked for shorter answers: the catalogue assistant is being
     # embedded in a sidebar with very little room, and the current answers
-    # wrap to four or five lines.
-    "Be concise. Answer in a single short sentence.\n"
+    # wrap to four or five lines. One sentence still overflowed the space, so
+    # this is the second attempt — a headline rather than a sentence.
+    "Answer with a headline, not a sentence: at most eight words.\n"
     # `must_contain: ["2025-03-21"]` failed against an answer that said
     # "March 21, 2025". Pinning the format makes the expectation a statement
     # about grounding rather than about phrasing.
