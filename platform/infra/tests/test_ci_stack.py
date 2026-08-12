@@ -6,10 +6,12 @@ assumed. So what it cannot do matters more than what it can, and both are
 asserted here rather than trusted to a review of the stack file.
 """
 
+import json
 from typing import Any
 
 import aws_cdk as cdk
 import pytest
+from agentpave_infra.log_groups import EVAL_LOG_STREAM, PREFIX
 from agentpave_infra.stacks.ci_stack import GITHUB_AUDIENCE, GITHUB_ISSUER, CiStack
 from aws_cdk.assertions import Match, Template
 
@@ -64,6 +66,27 @@ def test_the_ci_role_cannot_record_a_baseline(template: Template) -> None:
             assert not action.startswith("dynamodb:Put"), f"CI role holds {action}"
             assert not action.startswith("dynamodb:Update"), f"CI role holds {action}"
             assert not action.startswith("dynamodb:Delete"), f"CI role holds {action}"
+
+
+def test_the_ci_role_cannot_read_or_delete_the_logs_it_writes(template: Template) -> None:
+    """Append-only, and only in one place.
+
+    The scorecard grant is the one write M05 added, and the shape of it is the
+    point: a run may add a measurement and may not edit or remove one. A role
+    holding `logs:DeleteLogStream` could erase the run that scored badly, which
+    is the same failure as writing a baseline — laundering a bad day — reached by
+    a different route.
+    """
+    for statement in _statements(template):
+        for action in _actions(statement):
+            assert not action.startswith("logs:Delete"), f"CI role holds {action}"
+            assert not action.startswith("logs:Put") or action == "logs:PutLogEvents", (
+                f"CI role holds {action}"
+            )
+            # `CreateLogStream` would let a run open a stream of its own naming.
+            # The stream is created by `EvalStack` precisely so this stays shut.
+            assert action != "logs:CreateLogStream", f"CI role holds {action}"
+            assert action != "logs:*", "CI role holds logs:*"
 
 
 def test_the_ci_role_holds_no_bedrock_permission(template: Template) -> None:
@@ -150,6 +173,27 @@ def test_direct_invocation_stays_shut(template: Template) -> None:
     for statement in _statements(template):
         if _actions(statement) == ["lambda:InvokeFunction"]:
             assert statement["Condition"] == {"Bool": {"lambda:InvokedViaFunctionUrl": "true"}}
+
+
+def test_the_role_can_write_the_scorecard_stream_and_only_that(template: Template) -> None:
+    """The eval trend's whole supply line, and its blast radius.
+
+    The harness runs on a GitHub runner, so a score reaches CloudWatch only
+    because the run writes it (ADR-030). The resource is asserted in full rather
+    than for "contains `logs`": a grant on the group without the stream suffix,
+    or on `/agentpave/*`, would let a red run write anywhere the dashboard reads.
+    """
+    (statement,) = [s for s in _statements(template) if _actions(s) == ["logs:PutLogEvents"]]
+    (resource,) = (
+        statement["Resource"]
+        if isinstance(statement["Resource"], list)
+        else [statement["Resource"]]
+    )
+    rendered = json.dumps(resource)
+    assert f"log-group:{PREFIX}/*/eval:log-stream:{EVAL_LOG_STREAM}" in rendered
+    # The stage is the only wildcard, because this stack is an account-level
+    # singleton. The group prefix and the stream name are literal.
+    assert rendered.count("*") == 1, rendered
 
 
 def test_the_role_arn_is_published_for_the_repository_variable(template: Template) -> None:

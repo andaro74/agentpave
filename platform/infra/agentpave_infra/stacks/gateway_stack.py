@@ -33,6 +33,7 @@ class GatewayStack(Stack):
         asset_path: str,
         model_serve: str,
         model_judge: str,
+        log_group_name: str,
         **kwargs: object,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -58,9 +59,14 @@ class GatewayStack(Stack):
         # synthesises a helper Lambda holding `logs:PutRetentionPolicy` on `*`,
         # which would put a second, broader role in a stack whose whole point
         # is a narrow one.
-        log_group = logs.LogGroup(
+        #
+        # The name is passed in rather than generated, because the dashboard has
+        # to name this group in a Logs Insights query at synth time and every
+        # alternative fails silently (ADR-031, and the note in `log_groups.py`).
+        self.log_group = logs.LogGroup(
             self,
             "GatewayLogGroup",
+            log_group_name=log_group_name,
             retention=logs.RetentionDays.ONE_WEEK,
             removal_policy=RemovalPolicy.DESTROY,
         )
@@ -94,7 +100,7 @@ class GatewayStack(Stack):
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             description="Sole holder of bedrock:InvokeModel in AgentPave",
         )
-        log_group.grant_write(self.gateway_role)
+        self.log_group.grant_write(self.gateway_role)
 
         # Cross-region inference profiles (`us.anthropic.*`) resolve to
         # foundation models in several regions, so the model ARN is region-wild
@@ -141,7 +147,7 @@ class GatewayStack(Stack):
             handler="agentpave_gateway.lambda_handler.handler",
             code=lambda_.Code.from_asset(asset_path),
             role=self.gateway_role,
-            log_group=log_group,
+            log_group=self.log_group,
             memory_size=512,
             timeout=Duration.seconds(30),
             environment={
@@ -171,6 +177,11 @@ class GatewayStack(Stack):
         # tests whatever was last deployed instead of what someone remembered.
         CfnOutput(self, "FunctionUrl", value=self.function_url.url)
         CfnOutput(self, "MeteringTableName", value=self.metering_table.table_name)
+        # Published for a human checking the dashboard's source by hand. The
+        # dashboard itself does *not* read this output — it is given the same
+        # name at synth time, and the drift test is what keeps the two equal
+        # (ADR-031).
+        CfnOutput(self, "GatewayLogGroupName", value=self.log_group.log_group_name)
         CfnOutput(self, "GuardrailId", value=self.guardrail.attr_guardrail_id)
         # Published so an eval scorecard can record which models produced it.
         # A baseline whose model pair is unknown is not comparable to the next
