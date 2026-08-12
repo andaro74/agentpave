@@ -24,6 +24,7 @@ from pathlib import Path
 from agentpave_evalsvc.dataset import DatasetError, load_dataset
 from agentpave_evalsvc.harness import plan
 
+from . import gate as gate_mod
 from .scaffold import CLASSIFICATIONS, ScaffoldError, render, validate
 
 # Which milestone owns each verb, for the not-yet message. Kept as data so the
@@ -127,6 +128,25 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    gate = sub.add_parser("gate", help="run the quality ladder declared in a gate.yml")
+    gate.add_argument(
+        "--file",
+        default="gate.yml",
+        metavar="PATH",
+        help="the ladder to run (default: the platform's own gate.yml)",
+    )
+    tier = gate.add_mutually_exclusive_group()
+    tier.add_argument(
+        "--hermetic",
+        action="store_true",
+        help="only the levels that need no AWS account",
+    )
+    tier.add_argument(
+        "--aws",
+        action="store_true",
+        help="only the levels that need a deployed stack",
+    )
+
     new = sub.add_parser("new", help="scaffold a governed service from a template")
     new.add_argument("name", help="kebab-case; becomes the directory, package and stack name")
     new.add_argument("--template", default="agent-tools")
@@ -168,6 +188,22 @@ def _run_eval(args: argparse.Namespace) -> int:
         adversarial_only=args.adversarial_only,
         pr_comment_path=args.pr_comment,
     )
+
+
+def _run_gate(args: argparse.Namespace) -> int:
+    needs_aws = True if args.aws else False if args.hermetic else None
+    try:
+        config = gate_mod.load(Path(args.file))
+    except gate_mod.GateError as exc:
+        # Not a green gate with zero levels. An unreadable ladder is the one
+        # failure that could report success having run nothing.
+        print(f"gate: {exc}", file=sys.stderr)
+        return 1
+
+    levels = gate_mod.select(config, needs_aws=needs_aws)
+    results = gate_mod.run(levels, gate_mod.shell_runner_in(Path(args.file).resolve().parent))
+    print(gate_mod.report(config, results))
+    return 1 if gate_mod.blocked(results) else 0
 
 
 def _run_new(args: argparse.Namespace) -> int:
@@ -222,6 +258,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_eval(args)
     if args.verb == "new":
         return _run_new(args)
+    if args.verb == "gate":
+        return _run_gate(args)
 
     # Unreachable while argparse validates the verb, but an unhandled verb
     # must not exit 0 — a CLI that silently succeeds at nothing is the failure

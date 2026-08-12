@@ -1,0 +1,62 @@
+# The quality gate for the platform itself.
+#
+# The twin of `services/catalog-agent/gate.yml`, and the reason both exist as
+# data: one workflow reads a ladder and runs it, so a scaffolded service's gate
+# and the platform's gate cannot drift onto different machinery. `pave gate`
+# is the runner; `.github/workflows/gate.yml` is thirty lines of plumbing
+# around it.
+#
+# Why this file grades the *platform's* dataset and the service's file grades
+# its own: catalog-agent ships five deterministic cases and no judge (ADR-022),
+# which is the correct state for a service that has never run — but a suite of
+# substring asserts cannot detect a change in answer quality, and M05's whole
+# claim is a gate that blocks one. The 31-case judged set is the one with
+# demonstrated teeth: it went 30/30 to 19/30 when `max_tokens` was cut, and it
+# has now held 31/31 across seven consecutive runs.
+
+service: agentpave-platform
+classification: internal
+
+# Fail closed (CLAUDE.md standing rule 5). A level that errors is a failed
+# level, never a skipped one. There is deliberately no `continue_on_error`
+# key — see the note in the service's gate.yml for why adding one would undo
+# this file in a single line.
+fail_closed: true
+
+levels:
+  - id: L0
+    name: hermetic
+    blocking: true
+    needs_aws: false
+    command: make check
+    why: >-
+      lint, unit tests, contract tests on fixtures, policy tests, and `cdk
+      synth` with the IAM assertions. One verb rather than the ladder's usual
+      split, because this repo already defines its hermetic gate as `make
+      check` and a second definition here would be free to drift from it. A
+      scaffolded service separates L0 from L1 for a reason that does not apply
+      to the platform: its contract tests belong to code it does not own.
+
+  - id: L2
+    name: eval
+    blocking: true
+    needs_aws: true
+    command: uv run pave eval --diff --pr-comment gate-comment.md
+    why: >-
+      the golden set, graded, against the recorded baseline. `--diff` is the
+      point: an absolute pass count answers "is it broken", and only the diff
+      answers "did this change make it worse", which is the question a pull
+      request is asking. The comment is written to a file so the workflow posts
+      it verbatim rather than scraping it out of log output.
+
+  - id: L5
+    name: adversarial
+    blocking: true
+    needs_aws: true
+    command: uv run pave eval --adversarial-only
+    why: >-
+      the platform's controls, not the model's manners. Passes only on
+      "guardrail blocked, or policy denied and logged" — ARCHITECTURE.md
+      invariant 5, enforced in `adversarial.py`. Known gap, recorded rather
+      than papered over: none of these probes reaches Cedar, so no level of
+      this ladder tests tool authorization (ADR-026).

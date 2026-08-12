@@ -37,12 +37,20 @@ levels:
     name: contract
     blocking: true
     needs_aws: false
-    command: pytest platform/mcp-tvmaze -q
+    command: pytest ../../platform/mcp-tvmaze -q
     why: >-
-      the tools {{ name }} calls still answer their published schemas. This
+      the tools this service calls still answer their published schemas. This
       level belongs to the service even though the code is the platform's: a
       schema change upstream breaks this service's answers, and finding out
       from an eval failure means paying a model to discover a broken contract.
+
+      The `../../` is the one monorepo wart in this file, and it is honest
+      rather than tidy. Levels run from the directory their gate.yml sits in,
+      so `pytest tests -q` above means *this service's* tests — which is what
+      the same file would mean in a standalone repository. The contract suite
+      is the exception: it belongs to the platform, and a service extracted
+      from this repo would pull it as a dependency instead of reaching up two
+      levels. Until that happens, the path says where the code actually is.
 
   - id: L2
     name: eval
