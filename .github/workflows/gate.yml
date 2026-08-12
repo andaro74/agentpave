@@ -1,0 +1,142 @@
+# The quality gate. Thin on purpose.
+#
+# Everything this file decides is declared in `gate.yml` at the repo root and
+# executed by `pave gate`, so CI and a laptop run the same ladder. What lives
+# here is the plumbing GitHub needs and nothing else: when to run, which
+# identity to assume, and where to put the comment.
+#
+# The one judgement call encoded here is *when* the deployed levels run
+# (ADR-028). They cost roughly $0.47 and need AWS, so they run on changes that
+# could plausibly move a score — not on a README edit.
+
+name: quality gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege at the top, so a job that needs more has to say so.
+permissions:
+  contents: read
+
+concurrency:
+  # A second push supersedes the first. Two evals racing on one branch is two
+  # bills for one answer, and the older one is already stale.
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hermetic:
+    name: L0 hermetic
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint the workflows
+        # ROADMAP M05 asks for actionlint in the hermetic gate. It runs here
+        # rather than in `make check`, because `make check` must pass on a
+        # clean clone with no Go toolchain — ADR-029, which also records that
+        # this install is unpinned. The structural assertions in
+        # `test_workflows.py` check what actionlint has no opinion about:
+        # whether the gate fails closed.
+        run: |
+          bash <(curl -sSf https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run the hermetic levels
+        run: uv run pave gate --hermetic
+
+  changed:
+    name: what changed
+    runs-on: ubuntu-latest
+    outputs:
+      graded: ${{ steps.filter.outputs.graded }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the diff below compares against the base branch, and
+          # a shallow clone has no merge base to compare against.
+          fetch-depth: 0
+
+      - name: Decide whether anything gradeable changed
+        id: filter
+        # Written out rather than pulled from a third-party filter action: the
+        # decision of when to spend money on an eval is one this repository
+        # should be able to read without leaving it.
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="origin/${{ github.base_ref }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          changed=$(git diff --name-only "$base"...HEAD || git ls-files)
+          echo "changed files:"
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(platform/|pave/|gate\.yml|\.github/workflows/)'; then
+            echo "graded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "graded=false" >> "$GITHUB_OUTPUT"
+            echo "no gradeable paths changed — the deployed levels are skipped (ADR-028)"
+          fi
+
+  deployed:
+    name: L2 eval + L5 adversarial
+    needs: [hermetic, changed]
+    if: needs.changed.outputs.graded == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # OIDC. There is no access key anywhere in this repository (ADR-027).
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Assume the CI role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Run the deployed levels
+        id: gate
+        # Not `continue-on-error`. The comment is posted either way by the step
+        # below, which runs on failure explicitly — a gate that skipped its own
+        # explanation when it blocked would be at its least useful exactly when
+        # someone needs it most.
+        run: uv run pave gate --aws
+
+      - name: Post the scorecard
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- agentpave-eval-gate -->';
+            let body;
+            try {
+              body = fs.readFileSync('gate-comment.md', 'utf8');
+            } catch {
+              // The eval never got far enough to write one. Say so, rather
+              // than leaving the pull request with a red check and silence.
+              body = `${marker}\n## ❌ Quality gate — the eval did not complete\n\n` +
+                `No scorecard was written. See the run log for why.`;
+            }
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number});
+            const mine = comments.data.find((c) => c.body && c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: mine.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }

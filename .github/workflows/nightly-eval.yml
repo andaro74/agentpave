@@ -1,0 +1,60 @@
+# The nightly eval.
+#
+# The gate on a pull request answers "did this change make it worse". This
+# answers a different question: "is it still what it was", when nothing
+# changed. Model endpoints move underneath you, guardrail behaviour is
+# updated, and a suite that only runs on pull requests reports nothing on the
+# week nobody opens one.
+#
+# It is a report, not a ratchet. The CI role holds no `dynamodb:PutItem`, so
+# this cannot re-baseline (ADR-027) — a nightly that quietly moved the bar
+# every night would erase exactly the drift it exists to detect.
+
+name: nightly eval
+
+on:
+  schedule:
+    # 09:00 UTC. Deliberately not midnight: a failure should land while
+    # somebody might look at it, and a red run nobody sees for eight hours is
+    # a report with the reporting removed.
+    - cron: "0 9 * * *"
+  # Runnable by hand, because "is it still what it was" is also the question
+  # asked right after changing something outside this repository.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    name: L2 eval + L5 adversarial
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Assume the CI role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Run the deployed levels
+        run: uv run pave gate --aws
+
+      - name: Keep the scorecard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-scorecard
+          path: gate-comment.md
+          # A nightly with no pull request to comment on still produces the
+          # scorecard, and the artifact is where the trend is read from until
+          # M05's dashboard makes it a chart.
+          if-no-files-found: warn
+          retention-days: 30
