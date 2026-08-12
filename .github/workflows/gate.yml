@@ -151,3 +151,60 @@ jobs:
             } else {
               await github.rest.issues.createComment({owner, repo, issue_number, body});
             }
+
+  # The one check branch protection requires (ADR-034).
+  #
+  # `deployed` cannot be the required check, because it is conditional: on a
+  # docs-only pull request it never runs, and GitHub treats a required check that
+  # never runs as permanently pending. Requiring it would deadlock every
+  # documentation change, including the ones that close a milestone.
+  #
+  # The tempting fix is to make `deployed` always run and exit green when nothing
+  # gradeable changed. That is worse than the deadlock: it produces a **green
+  # `L2 eval + L5 adversarial`** having evaluated nothing, and a required check is
+  # read as a verdict. This repository has shipped that shape four times already —
+  # M02's transport failures folded into passing results, M04's `traced` act
+  # vouching for Lambda's own segments, ADR-015's probe that could never pass, and
+  # the first PII assertion that read the same YAML on both sides. A fifth, in the
+  # milestone whose thesis is that gates fail closed, is not a trade worth making.
+  #
+  # So the skip stays a visible skip and this job carries the verdict. It states
+  # the whole truth table explicitly, and `test_workflows.py` asserts each branch
+  # of it — which is the other reason it exists: an `if` buried in a shell step is
+  # not something the hermetic gate can check.
+  verdict:
+    name: gate verdict
+    needs: [hermetic, changed, deployed]
+    # Always, or a skipped `deployed` would skip this too and reintroduce the
+    # pending-forever deadlock one level up.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide
+        env:
+          HERMETIC: ${{ needs.hermetic.result }}
+          CHANGED: ${{ needs.changed.result }}
+          DEPLOYED: ${{ needs.deployed.result }}
+          GRADED: ${{ needs.changed.outputs.graded }}
+        run: |
+          set -euo pipefail
+          echo "hermetic=$HERMETIC changed=$CHANGED deployed=$DEPLOYED graded=$GRADED"
+
+          # Fail closed on anything that is not an outright success, which
+          # includes `cancelled`. A superseded run must not bank a pass — the
+          # concurrency group above cancels the older run on a second push, and
+          # its checks belong to the commit it was testing.
+          [ "$HERMETIC" = "success" ] || { echo "L0 did not pass"; exit 1; }
+          [ "$CHANGED" = "success" ] || { echo "the path filter did not run"; exit 1; }
+
+          if [ "$GRADED" = "true" ]; then
+            [ "$DEPLOYED" = "success" ] || { echo "L2/L5 did not pass"; exit 1; }
+            echo "✅ every level passed"
+          else
+            # `skipped` and nothing else. If the deployed job ran at all when the
+            # filter said nothing gradeable changed, the two disagree about what
+            # this run did, and a verdict is the wrong place to guess.
+            [ "$DEPLOYED" = "skipped" ] || {
+              echo "the filter said nothing gradeable changed but L2/L5 is '$DEPLOYED'"; exit 1; }
+            echo "✅ L0 passed; no gradeable paths changed, so L2/L5 was skipped (ADR-028)"
+          fi
