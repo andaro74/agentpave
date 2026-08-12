@@ -159,6 +159,19 @@ class DashboardStack(Stack):
         agent and the eval harness — and the useful question is "which of them is
         the money", which a two-row table answers and a stacked area chart
         decorates.
+
+        **Every alias differs from the field it aggregates**, and that is not
+        style. `sum(input_tokens) as input_tokens` aliases an aggregate to the
+        name of the field it reads, and Logs Insights does not resolve the
+        self-reference: the column renders **empty**. The first deployed run of
+        this panel showed exactly that — `requests` populated from
+        `count() as requests`, which introduces a new name, and all three
+        `sum()` columns blank. `sort` on a blank column then ordered the table
+        arbitrarily, which was the tell.
+
+        Nothing hermetic could see it. The synth assertions checked that the
+        query says `sum(cost_usd)` and groups by `service_id`, and it did both.
+        A test now forbids the self-aliasing pattern itself.
         """
         return cloudwatch.LogQueryWidget(
             title="Tokens and cost per service",
@@ -167,11 +180,11 @@ class DashboardStack(Stack):
             query_lines=[
                 'filter event = "agentpave.gateway.request"',
                 "stats count() as requests,"
-                " sum(input_tokens) as input_tokens,"
-                " sum(output_tokens) as output_tokens,"
-                " sum(cost_usd) as cost_usd"
+                " sum(input_tokens) as tokens_in,"
+                " sum(output_tokens) as tokens_out,"
+                " sum(cost_usd) as spend_usd"
                 " by service_id, feature_id",
-                "sort cost_usd desc",
+                "sort spend_usd desc",
             ],
             width=HALF,
             height=6,

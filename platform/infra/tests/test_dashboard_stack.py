@@ -180,6 +180,51 @@ def test_the_refusal_panel_separates_the_stage_from_the_filter(template: Templat
     assert "by stage" in refusals
 
 
+def test_no_aggregate_is_aliased_to_the_field_it_reads(template: Template) -> None:
+    """`sum(cost_usd) as cost_usd` renders an **empty column**.
+
+    Logs Insights does not resolve an aggregate aliased to the name of the field
+    it aggregates. The first deployed run of this dashboard showed it plainly:
+    `count() as requests` populated, because `requests` is a new name, and
+    `sum(input_tokens) as input_tokens`, `sum(output_tokens) as output_tokens`
+    and `sum(cost_usd) as cost_usd` all blank beside it.
+
+    This is the failure class the whole test module exists for — a query that is
+    valid, deploys clean, and renders as a table of empty cells that reads as a
+    period with no traffic. No assertion about *what* the query says could catch
+    it; the shape of the alias is the bug.
+    """
+    for query in _queries(template):
+        for _agg, field, alias in re.findall(r"(\w+)\(([^)]*)\)[^,]*?\s+as\s+(\w+)", query):
+            assert alias != field.strip(), (
+                f"'{_agg}({field}) as {alias}' aliases an aggregate to its own field "
+                f"and will render empty: {query}"
+            )
+
+
+def test_every_sort_key_is_a_column_the_query_produces(template: Template) -> None:
+    """Sorting on a column that does not exist orders the table arbitrarily.
+
+    It is also the second symptom of the self-alias defect rather than an
+    independent one: `sort cost_usd desc` looked correct beside
+    `sum(cost_usd) as cost_usd`, and with the column empty it put the heaviest
+    caller fifth of six. The ordering being wrong is what made the blank columns
+    obvious, so it is worth pinning on its own.
+    """
+    for query in _queries(template):
+        sort_keys = re.findall(r"\bsort\s+(\w+)", query)
+        if not sort_keys:
+            continue
+        aliases = set(re.findall(r"\bas\s+(\w+)", query))
+        group_keys = {
+            key.strip()
+            for clause in re.findall(r"\bby\s+([^|]+)", query)
+            for key in clause.split(",")
+        }
+        for key in sort_keys:
+            assert key in aliases | group_keys, f"'sort {key}' names no column in: {query}"
+
+
 def test_the_spend_panel_groups_by_service(template: Template) -> None:
     """ROADMAP asks for tokens and cost *per service*. A total would answer a
     question nobody has: the useful one is which caller is the money."""
