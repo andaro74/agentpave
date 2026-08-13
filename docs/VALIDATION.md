@@ -706,3 +706,168 @@ has demonstrated nothing.
   with `gh api repos/<owner>/<repo>/issues/<n>/comments`.
 - **`pave selfheal --changed` repeats, it does not take a list.** One flag per
   path.
+
+---
+
+## M07 — mid-milestone handoff, 2026-08-13
+
+Written the same way M05's, M06's and M07's openings were: what is true, what is
+not, and what a new session cannot infer from the code. **M07 is not closed.**
+Phases 0–3 are done and pushed; the deployed gate has not been run.
+
+### Where things stand
+
+`main` is at **`bad47c5`**, pushed, with the full ladder green on it —
+`what changed`, `L0 hermetic`, `L2 eval + L5 adversarial`, `gate verdict` all
+success, graded run `eval-1786638648-9506c2` at 31/31 and $0.471949. `make check`
+is **738 tests**. **Thirty-eight ADRs.** Six stacks are still deployed in
+`us-west-2` and **nothing has been torn down**.
+
+Seven commits carry M07 so far: `0c630fb` (tooling), `dfad510` (demo assets),
+`5bb71cd` (the narrowing + ADR-038), `d2e9224` (the README), `7728896` (review
+rows), `6ebebdd` (link-checker fix), `bad47c5` (the eleventh instance).
+
+### What is done
+
+- **The narrowing.** All four claims the handoff above named are narrowed *at
+  their source*, not only in the README: `tools.yaml`'s header and ROADMAP M02
+  carry ADR-037's union-type exemption; the Makefile's shadow-eval comment is a
+  measurement; ARCHITECTURE §7 closes **all three** open questions — Q1 by fiat
+  that says so (the trajectory is a constant: `_grounding()` returns
+  `search_show` unconditionally, so a trajectory judge would agree with itself
+  31 times), Q3 by measurement (saturation and incumbent-priced budgets, not
+  dataset size — 17 of 31 cases genuinely evaluate a Sonnet candidate).
+- **`make diagrams` implemented** — the last verb still failing loudly. Renders
+  with mermaid-cli, stays out of `make check` for ADR-029's reason, and the
+  diagram is current for the first time since M03.
+- **A documentation link checker** (`tests/test_docs_links.py`), resolving
+  against `git ls-files` rather than the working tree.
+- **The README**, with by-the-numbers, lessons, and a what-would-make-this-
+  production section.
+- **ADR-038** and the dashboard fix it decides.
+- **Phase 1's evidence is extracted and committed**, which was the whole reason
+  it ran before any teardown.
+
+### The numbers, recovered and safe
+
+Lifetime ledger: **2,949 rows, $20.448221**, judge **$14.113701 = 69.0%**,
+`catalog-agent` **$0.003145**. The two M06 shadow runs cost **$0.915088** and
+**$0.936370** — 1.94× and 1.98× an eval run, so "roughly double" was right and
+had simply never been checked. Run 2's confound has a size: serving
+**+$0.202709**, judging **−$0.212103**, netting −$0.0094 against the −$0.010189
+reported. All of it is in the README and the M07 rows above; **none of it needs
+AWS again.**
+
+### Five facts that will bite
+
+1. **`make destroy-dev` will silently break CI.** It runs `cdk destroy --all`,
+   which includes `AgentPave-Ci`. The role name is CloudFormation-generated
+   (`AgentPave-Ci-CiRole5A6E8228-sfjQ0U4K5fSE`), so recreating it produces a new
+   suffix and the GitHub repository variable `AWS_CI_ROLE_ARN` — read by both
+   workflows — points at a role that no longer exists. **This is the open
+   decision blocking Phase 4.** Nothing in the Makefile or any ADR mentions it;
+   it is ADR-034's shape again, a reference living outside this repository that
+   nothing here can pin.
+2. **ADR-038's fix is in code, not deployed.** The live dashboard still runs
+   single-series `max(pass_rate)`, so the 29/31 regression of 01:36Z remains
+   invisible on the panel — 2026-08-13 now holds five runs, four passing. The
+   chart is a working demonstration of the defect it documents.
+3. **The baseline id will change at Phase 4.** `eval-1786542623-d4423c` lives in
+   a table with `removal_policy=DESTROY`. After a clean deploy, `make
+   seed-baseline` writes a new one. That is a fact for the review log, not a
+   discrepancy.
+4. **PR [#1](https://github.com/andaro74/agentpave/pull/1) stays open and red.**
+   PR #2 is merged. Neither is affected by any teardown.
+5. **Pushing to `main` reports "Bypassed rule violations".** That is ADR-034's
+   protection working with `enforce_admins: false`, not a misconfiguration.
+
+### Decisions already made — do not re-litigate
+
+- **The end state is deployed, not destroyed.** The gate asks for a walkthrough
+  *from* a clean deploy and for evidence that `destroy-dev` leaves nothing
+  billing; it never asked the project to end torn down. One teardown, at the
+  start, satisfies both. Leaving it up is also better evidence for ADR-002 than
+  tearing down, and keeps CI's graded levels working.
+- **The leakage panel's `Last reviewed by a human: 2026-08-12` was deliberately
+  not bumped.** Changing it would be the platform certifying itself on the one
+  panel whose purpose is admitting no automation stands behind the number, and
+  whose own text names a stale date as the failure mode to watch for. It ships
+  reading stale, which is the panel working.
+- **The README publishes eleven instances of the recurring defect, five in its
+  table, with the twelfth deliberately excluded** — a `pytest | tail` pipeline
+  swallowing a non-zero exit and letting a red commit reach `main`. It is
+  recorded in the M07 rows above because it is this session's tooling, not the
+  platform's, and counting it in the README would be padding.
+- **The nightly eval stays on for now.** It is the only real cost of leaving AWS
+  up (~$0.47/night, ~$14/month) and it is what keeps the dashboard worth opening,
+  since gateway logs expire in a week. Disabling it later is commenting out two
+  `schedule:` lines in `.github/workflows/nightly-eval.yml`.
+
+### The one open decision, and it blocks Phase 4
+
+**Does the teardown include `AgentPave-Ci`?**
+
+- **Option A (recommended):** destroy the five stage stacks only — `Gateway`,
+  `Mcp`, `Eval`, `Dashboard`, `Service-CatalogAgent` — and leave `AgentPave-Ci`
+  standing. The clean-stack claim is about the platform the paved road deploys;
+  the CI stack is account-level identity plumbing holding no per-stage state.
+  Cost: the `make destroy-dev` verb is exercised in part, and the review row must
+  say so.
+- **Option B:** full `make destroy-dev`, then read the new role ARN after the
+  redeploy and update the `AWS_CI_ROLE_ARN` GitHub variable by hand. Faithful to
+  the verb, with a window where a public repository's required check cannot run.
+
+Either way the gap deserves writing up — a teardown verb that silently orphans an
+external reference is exactly the failure class this milestone is about.
+
+### What remains
+
+**Phase 4 — the deployed gate.** Teardown (per the decision above) → confirm
+nothing remains billing → `make deploy-dev` → `make seed-baseline` (~$0.47) →
+**`make walkthrough` run by a human, not by an agent debugging its own fix** →
+leave the platform up. Then re-read the dashboard, which is the first sight of
+ADR-038's two-series trend deployed.
+
+**Phase 5 — close.** A VALIDATION row for the deployed gate; the README's test
+count checked against the final number; `M07` tag (**lowercase collision trap:
+`git tag -a M07` can collide with an existing `m07` on a case-insensitive
+filesystem**); project-page copy for floresinnovations.com/projects, which is
+**not drafted**.
+
+### Still open, and carried forward untouched
+
+All five M05 threads survive: the judge's **near-miss blind spot** (needs claim
+extraction or a groundedness-only second judge, not prompt wording), the
+**`airing-schedule-abc-overnight` tone flake**, **ADR-028's path filter leaking
+on `templates/`**, **ADR-026's untested tool authorization**, and **ADR-034's
+un-assertable half**. M06's two survive: **ADR-035's classifier has no automated
+consumer**, and **ADR-037's union-type gap**, whose repair must ship a test that
+fails against *today's* helper. M07 adds one: **ADR-038 fixes one panel, not the
+class** — any Logs Insights aggregate discards something, and no dashboard test
+can tell that a query returns a true number answering the wrong question.
+
+### Environment traps found in M07, on top of those above
+
+- **A bare `%%` line in a Mermaid file is not a blank comment.** It eats the
+  following newline and merges into `flowchart TB`, failing to parse. Keep
+  comment lines non-empty.
+- **mermaid-cli's default hides every label in a `foreignObject`**, which
+  GitHub's sanitiser strips — the SVG publishes as boxes with no text, while
+  rendering perfectly locally and in any PNG export.
+  `docs/diagrams/mermaid-config.json` sets `htmlLabels: false` and a test asserts
+  the committed SVG carries none. **Verifying a render against a PNG verifies the
+  wrong artifact.**
+- **A shell pipeline returns its last command's exit status**, so
+  `pytest -q | tail -3 && git commit` commits over a red suite. Run the gate
+  unpiped and read the exit code.
+- **GIF encoding for GitHub:** recorded at 25 fps and 1646–2346px wide, the three
+  acts totalled 237 MiB and one exceeded GitHub's 100 MiB hard limit.
+  `gifsicle --resize-width 1100 --colors 128 -O3`, with no lossy compression,
+  brought them to 10.4 MiB with every duration preserved. Continuous scrolling
+  defeats GIF's inter-frame compression; scroll in discrete jumps.
+- **Reading a Logs Insights panel is not reading the data.** The trend's flat
+  line was diagnosed from the scorecard log rows, not from the chart — the same
+  lesson M05 recorded, and the reason ADR-038 exists.
+- **Heredocs in this environment are fragile for long prose.** Appending this
+  section with `cat >> file <<'EOF'` failed on an unmatched quote; writing it
+  through the editor worked first time.
