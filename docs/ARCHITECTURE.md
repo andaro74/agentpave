@@ -29,10 +29,16 @@ The demo narrative is three acts, each captured as a GIF:
   the eval gate fails on groundedness/completeness regression vs. baseline →
   merge blocked, score-diff table posted as a PR comment. A quality regression
   caught by infrastructure, not by a user. The red PR stays in history.
-- **Act 3 — Self-healing.** A tool schema change breaks a contract test → a
-  GitHub Action runs Claude Code headless → Claude proposes the repaired test
-  as an `ai-proposed` PR with its reasoning → a human approves. The platform
-  uses AI to maintain its own QA, under propose/dispose.
+- **Act 3 — Self-healing, human-triggered.** A tool schema change breaks a
+  contract test → `pave selfheal` classifies the failure as schema drift rather
+  than a real defect → Claude Code, run by a human against that verdict,
+  proposes the repaired test as an `ai-proposed` PR with its reasoning → a
+  second human approves, and the PR passes the same `gate verdict` check as any
+  other. The platform uses AI to maintain its own QA, under propose/dispose.
+  **The model call is invoked by a person, not by a GitHub Action** — running it
+  in CI needs a Bedrock-holding identity, which would weaken invariant 1, and
+  that trade was declined (ADR-035). The classifier — the half that decides
+  whether an AI may be pointed at a failure at all — ships and is tested.
 
 ## 2. The sample use case riding the platform
 
@@ -135,7 +141,11 @@ agentpave/
 ├── pave/                      # the CLI: new / eval / shadow-eval               (M03–M04)
 ├── templates/agent-tools/     # the golden path                                 (M04)
 ├── services/catalog-agent/    # the scaffolded sample service (committed)       (M04)
-└── .github/workflows/         # gate.yml (M05) · selfheal.yml (M06) · nightly-eval.yml (M05)
+└── .github/workflows/         # gate.yml (M05) · nightly-eval.yml (M05)
+                               # selfheal.yml was planned here and is deferred:
+                               # it needs a Bedrock-holding CI identity, and the
+                               # classifier it would call ships as `pave
+                               # selfheal` instead (ADR-035)
 ```
 
 ## 5. Build order
@@ -160,9 +170,16 @@ gate (`make check`, no AWS) and a deployed gate (human-run after
 - **Dogfooding MCP**: the tvmaze MCP server registered in Claude Code's own
   configuration — the same governed tool serves the production agent and the
   developer's assistant.
-- **Headless Claude Code in CI** for M06 self-healing — the platform maintained
-  by the same AI tooling that built it, under propose/dispose with mandatory
-  human review.
+- **Claude Code against a classifier's verdict** for M06 self-healing — the
+  platform maintained by the same AI tooling that built it, under
+  propose/dispose with mandatory human review. Planned as headless in CI and
+  deferred there (ADR-035): the only implementation that keeps standing rule 3
+  and ADR-027 intact also needs an identity holding `bedrock:InvokeModel`, and
+  paying for a demo act with a permanent weakening of invariant 1 was the wrong
+  trade. What ships is `pave selfheal`, which decides whether a red suite is
+  drift an AI may repair or a defect it must not touch; a human runs the model
+  against that verdict. The deferred workflow's design, and the two things that
+  would trigger building it, are in the ADR.
 - **Dataset generation**: Claude drafts golden and adversarial cases; a human
   curates; the curation rate is recorded and published.
 

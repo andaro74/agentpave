@@ -108,6 +108,17 @@ incumbent model/prompt on the golden set (the canary stand-in).
   human approves; Act 3 recordable. **If this milestone slips:** ship without
   it and record the design as an ADR marked *next* — honesty over vaporware.
 
+> **Outcome (2026-08-12): the slip clause was used, in half.** `selfheal.yml`
+> is not written. Running Claude Code headless in CI needs an identity holding
+> `bedrock:InvokeModel`, and no such identity exists that does not weaken
+> ARCHITECTURE invariant 1 — the trade was declined and the design recorded as
+> *next* (ADR-035). What shipped is the classifier, `pave selfheal`, which is
+> the distinction the milestone was actually about; a human runs Claude Code
+> against its verdict, so Act 3 is recordable but human-triggered. `pave
+> shadow-eval` shipped in full, varying the candidate model through the
+> gateway's routing table rather than by letting a caller name a model
+> (ADR-036). Both hermetic gates are met.
+
 ## M07 — Docs + publish
 
 README (epigraph, problem, the three acts as GIFs, architecture, honest cost

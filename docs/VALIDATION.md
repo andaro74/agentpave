@@ -50,6 +50,7 @@ CI runs the hermetic gates; a human runs everything below.
 | 2026-08-12 | M05 | deployed | Phase 3 verified end to end from the log rows and the run history, after the panel reading above was called into question | **Everything works, and the one claim that could only be tested from CI is now tested.** Three scorecard lines exist, one per origin: `local` 13:50:23Z, `nightly eval` 15:15:11Z, `quality gate` 15:15:37Z — all 31/31 cases, 10/10 probes. **Both CI lines were written by `AgentPave-Ci` through `logs:PutLogEvents` on one stream**, holding no `logs:CreateLogStream` and no `dynamodb:PutItem`. A laptop run proves nothing about that grant, because a developer profile carries broad permissions; only a run on a GitHub runner does, and two have. The trend rendering as a single point is correct rather than a symptom — all three share a UTC day, and `bin(1d)` with `max(pass_rate)` collapses them by design. Incidental and worth recording: **31/31 three times at $0.472279 / $0.472234 / $0.472039, within 0.05% across a laptop and two GitHub runners.** ADR-016's pinned temperature has been reproducible across runs on one machine since M03; this is the first evidence it holds across machines | Nothing to fix. Two rows above were corrected rather than left standing — the "$0.95 with nothing to show for it" was runs in flight, and the nightly had already fired. **What remains for M05 is one decision, not one defect**: `main` is unprotected, so the milestone's "merge blocked" claim is not yet true, and requiring the deployed check collides with ADR-028's path filter. Also worth stating for whoever runs these commands next: on Git Bash, a log group name beginning with `/` is rewritten into a Windows path before the AWS CLI ever sees it, and the call fails on a regex that the name actually satisfies. `MSYS_NO_PATHCONV=1` is the fix, and it cost a confused minute here |
 
 | 2026-08-13 | M05 | deployed | Branch protection applied and ADR-034's verdict job exercised on all three of its paths, in CI rather than on paper | **The milestone's headline claim is now true.** `main` requires one check, `gate verdict`, with no required reviews and `enforce_admins: false` — the narrowest rule that makes "merge blocked" mean it, and nothing more. All three branches of the truth table ran in production: (1) **gradeable change, everything passes** → four jobs, verdict green (the `Images` push, 15:43Z); (2) **docs-only change** → `what changed` green, `L2 eval + L5 adversarial` **skipped**, verdict green, **$0** — the deadlock ADR-034 exists to avoid, avoided, with the skip rendering as a skip rather than as a green eval; (3) **gradeable change that regresses** → L2 red, **verdict red**, `mergeStateStatus: BLOCKED`. **And PR #1 was first blocked for the wrong reason**, which is worth recording: its head commit predated the verdict job, so the required check had never run on it and GitHub held it pending — the exact deadlock ADR-034 was written about, sitting on the demo pull request. Blocked either way, but "a required check never ran" is not Act 2. Updating the branch (`PUT /pulls/1/update-branch`, ~$0.47) put a run with the verdict job on the new head `fc1a194`, where the four checks now read `L0 hermetic` ✅, `what changed` ✅, `L2 eval + L5 adversarial` ❌, `gate verdict` ❌. `mergeable` still reads `MERGEABLE` and that is correct — it reports conflicts, never protection | Nothing to fix, and three things gained. **A failing run reached the eval trend for the first time**: `origin='quality gate'`, 29/31, `pass_rate 0.935`, `passed=False`, stamped `2026-08-13T01:36Z` — which crossed the UTC day boundary, so the trend now renders **two points, 100 → 93.5**, and the panel shows a regression rather than a dot. Nothing had demonstrated that. **The comment's update-in-place is proven far harder than before**: one bot comment, created `2026-08-12T11:20:14Z` and updated `2026-08-13T01:40:42Z` — five runs and fourteen hours, still one comment. **And the bar moved without weakening**: `make eval` carries `--save-baseline`, so the local run recorded `eval-1786542623-d4423c` at 31/31, replacing `eval-1786459419-6aaf90`. Worth knowing, because the gate's comment now names a baseline this file did not — `is_recordable` is what kept it a passing run, and the demo PR is still measured against 100% |
+| 2026-08-13 | M06 | hermetic | M06 built at half its planned scope after the CI-model-call collision was costed: `pave selfheal` and `pave shadow-eval`, no new stack and no new workflow — `make check` 708 tests, ruff, `cdk synth` over the same six stacks | **The milestone's first decision was to decline one.** Running Claude Code headless in CI keeps standing rule 3 only via `CLAUDE_CODE_USE_BEDROCK=1`, which needs an identity holding `bedrock:InvokeModel` — and invariant 1's assertion today is one grep across every synthesised template. Amending it would have traded that for "no Bedrock outside the gateway *and the self-heal stack*", a strictly weaker claim, paid for the milestone ROADMAP marks as a stretch, on the riskiest surface in the project: a credentialed agent in CI with pull-request write and a prompt-injection path through the repository contents it reads. Declined (ADR-035); the classifier — the half the milestone was actually about — ships. **A second collision the handoff did not name: `pave shadow-eval` could not vary the model as specified.** `GatewayRequest` has no model field; routing resolves `(feature_id, classification)` inside the gateway, which is invariant 1 made mechanical. A caller-declared model would have routed around the table that exists to prevent exactly that, and made "try the candidate model" indistinguishable at the boundary from "try any model, unpriced and unguarded". The candidate is a **feature** instead — one entry in `CAPABLE_FEATURES` — so the model axis works and the invariant is untouched (ADR-036) | **The classifier was rehearsed against real pytest output rather than hand-written fixtures, and both paths hold.** Staged drift in `tools.yaml` (`required: [query]` → `[query, locale]`) reddened exactly the two advertised-vs-declared assertions; `pave selfheal` returned `schema_drift`, exit 0. Staged real defect (`required: [shows, total_count]`, a field the server never returns) reddened `test_response_validates_against_the_declared_output_schema`; the classifier returned `real_defect`, exit 1, refusing to propose — **and the suite's own teeth test `test_contract_check_catches_schema_drift` went red alongside it**, which is corroboration the break was real rather than cosmetic. Both stagings reverted via `git checkout`, tree confirmed clean. Three properties are enforced in code because none of them has a symptom in the output: **the judge never moves between shadow arms** (rewriting its feature or rubric would make every printed delta measure the grader); **`shippable` requires that no case regressed**, not an improved mean, which is the whole difference from `pave eval --diff`; and **the selfheal exit code makes a crash non-zero**, so a broken invocation can never read as permission to propose. One near-miss worth recording: `NOT_YET` emptying turned two `@parametrize` loops over it into **zero collected tests, reporting green** — the not-yet rule's own coverage would have vanished silently on the day it finally had nothing to guard. Replaced with an explicit assertion plus a direct test of the mechanism |
 
 ## M04 AgentCore-migration checklist (per ADR-003)
 
@@ -448,6 +449,80 @@ model call that does not.
 - **ADR-034's un-assertable half** — the branch protection rule is applied by hand
   with `gh api`, is not in version control, and would not survive recreating the
   repository.
+
+## M06 — what shipped, and what did not
+
+**The milestone was cut in half deliberately, before any code was written.** The
+handoff above named the CI collision and asked for it to be settled as an ADR
+first; settling it produced a decision to decline rather than to implement.
+
+### Shipped
+
+- **`pave selfheal`** — the trigger classifier. Reads a JUnit report plus a
+  change set, returns `schema_drift`, `real_defect`, or `unclassified`, and
+  proposes only on the first. Three rules, in order, every one of which falls
+  toward refusal. Rehearsed against real failing runs in both directions.
+- **`pave shadow-eval`** — candidate vs. incumbent on the golden set, the canary
+  stand-in ARCHITECTURE §3 promised in place of canary infrastructure. Model
+  axis through the routing table, prompt axis by substitution, judge pinned on
+  both arms, no baseline written and no scorecard line emitted.
+- **`make shadow-eval`**, a thin wrapper for the same reason `make eval` is one.
+- **ADR-035** (self-heal in CI deferred, design recorded, marked *next*) and
+  **ADR-036** (the shadow candidate is a routed feature).
+- ARCHITECTURE §1, §4 and §6 updated so `selfheal.yml` is not listed and absent
+  — the discipline ADR-033 set in M05.
+
+### Not shipped, on purpose
+
+`selfheal.yml`. No identity in this account holds Bedrock outside
+`AgentPave-Gateway`, `test_ci_stack.py`'s assertion is unmodified, and invariant
+1 is unamended. ADR-035 records both rejected designs — the separate self-heal
+role, and the gateway Bedrock-protocol passthrough — and names the two triggers
+that would reopen it.
+
+### Before M06 can close
+
+- [x] Hermetic gate green — `make check`, 708 tests, ruff, `cdk synth` over six
+      stacks. Both halves ROADMAP M06 asks for are covered: the classifier and
+      the comparator.
+- [x] ADRs written — **035 and 036**.
+- [x] This file updated.
+- [ ] **Deployed gate, run by a human.** Two things, neither yet done:
+      `make shadow-eval` against the deployment (~$0.94, roughly double an eval
+      run), and Act 3 — stage a schema change, let the contract suite redden,
+      run `pave selfheal`, run Claude Code against its verdict from a laptop,
+      and merge the resulting `ai-proposed` pull request through `gate verdict`.
+- [ ] `M06` tag.
+
+### What a deployed run should watch for
+
+- **The shadow candidate has never reached Bedrock.** `SHADOW_CANDIDATE_FEATURE`
+  is asserted at the routing table and has never been sent through the deployed
+  gateway. The failure mode if it is wrong is the quiet one: an unrouted feature
+  defaults *open* to the fast model, so both arms would serve on the same model
+  and the report would print a confident, reassuring "no case changed outcome"
+  having compared the incumbent to itself. A routing test guards it hermetically;
+  the deployed check is that the two arms' serving models differ in the printed
+  header.
+- **Cost is estimated, not measured.** "Roughly double an eval run" is
+  arithmetic on M05's $0.472, plus one calibration pass shared across both arms.
+  The real figure belongs in this file and in M07's honest-cost section.
+- **The strict `shippable` rule has never fired on real data.** On 31 cases a
+  single case is 3.2% of the pass rate, and the tone flake on
+  `airing-schedule-abc-overnight` is exactly the kind of case that could sink a
+  verdict a human would accept. If that happens it is the rule working, not
+  failing — but it is worth seeing once before M07 restates Q3.
+
+### Carried into M07 unchanged
+
+All five threads from the handoff survive M06 untouched: the judge's near-miss
+blind spot, the `airing-schedule-abc-overnight` tone flake, ADR-028's path
+filter leaking on `templates/`, ADR-026's untested tool authorization, and
+ADR-034's un-assertable half. **ADR-035 adds a sixth**, and it is the one most
+likely to be forgotten because it looks finished: the classifier has no
+automated consumer, so nothing exercises its rules except its own tests. Which
+contract tests genuinely drift is a hypothesis a year of real failures would
+correct and unit tests cannot.
 
 ## Ad-hoc reviews
 
