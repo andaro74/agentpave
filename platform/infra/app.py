@@ -10,7 +10,9 @@ import os
 from pathlib import Path
 
 import aws_cdk as cdk
+from agentpave_infra.log_groups import eval_log_group, gateway_log_group
 from agentpave_infra.stacks.ci_stack import CiStack
+from agentpave_infra.stacks.dashboard_stack import DashboardStack
 from agentpave_infra.stacks.eval_stack import EvalStack
 from agentpave_infra.stacks.gateway_stack import GatewayStack
 from agentpave_infra.stacks.mcp_tvmaze_stack import McpTvmazeStack
@@ -28,6 +30,16 @@ DEFAULT_SERVICE_ASSET = REPO_ROOT / "services" / "catalog-agent"
 
 STAGE = os.environ.get("AGENTPAVE_STAGE", "dev")
 
+# Both log group names are computed here, once, and handed to the stack that
+# creates the group *and* to the dashboard that queries it. This file is the
+# single place the two can agree, and a synth assertion is what fails if they
+# stop agreeing (ADR-031). The alternative — the dashboard
+# importing the name across stacks — would pin the gateway alive for as long as
+# the dashboard exists, which is the coupling the note below refuses for
+# services and refuses here for the same reason.
+GATEWAY_LOG_GROUP = gateway_log_group(STAGE)
+EVAL_LOG_GROUP = eval_log_group(STAGE)
+
 app = cdk.App()
 
 GatewayStack(
@@ -38,6 +50,7 @@ GatewayStack(
         "AGENTPAVE_MODEL_SERVE", "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     ),
     model_judge=os.environ.get("AGENTPAVE_MODEL_JUDGE", "us.anthropic.claude-sonnet-4-6"),
+    log_group_name=GATEWAY_LOG_GROUP,
     description="AgentPave LLM Gateway: routing, guardrails, metering",
 )
 
@@ -51,7 +64,20 @@ McpTvmazeStack(
 EvalStack(
     app,
     f"AgentPave-Eval-{STAGE}",
-    description="AgentPave eval service: baseline score store",
+    log_group_name=EVAL_LOG_GROUP,
+    description="AgentPave eval service: baseline score store and scorecard log",
+)
+
+# Observability, in its own stack because it belongs to no single component: it
+# reads the gateway's group and the eval service's, and folding it into either
+# would make one component's stack own a panel about another's.
+DashboardStack(
+    app,
+    f"AgentPave-Dashboard-{STAGE}",
+    stage=STAGE,
+    gateway_log_group=GATEWAY_LOG_GROUP,
+    eval_log_group=EVAL_LOG_GROUP,
+    description="AgentPave dashboard: eval trend, spend, guardrail interventions, leakage",
 )
 
 # The identity GitHub Actions assumes. Not stage-suffixed: an OIDC provider is

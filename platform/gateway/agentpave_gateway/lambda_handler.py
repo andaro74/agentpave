@@ -17,6 +17,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from . import telemetry
 from .invoker import BedrockInvoker
 from .metering import MeteringWriter
 from .models import GatewayCompletion, GatewayRefusal, GatewayRequest
@@ -162,6 +163,12 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     request_id = getattr(context, "aws_request_id", None) or str(uuid.uuid4())
     outcome = gateway.handle(request, request_id=request_id)
+
+    # One structured line per request, refusals included. Until M05 the gateway
+    # wrote nothing at all, so everything it knew lived in the metering table
+    # and a dashboard had nothing to read (ADR-030). Emitted here rather than
+    # inside `handle` so it covers every return path exactly once.
+    telemetry.emit(telemetry.request_line(request, outcome, request_id=request_id))
 
     # A refusal is a 403, not a 500: the platform worked exactly as designed.
     status = 403 if isinstance(outcome, GatewayRefusal) else 200

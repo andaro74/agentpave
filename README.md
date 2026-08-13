@@ -2,6 +2,8 @@
 
 > **The paved road provides. The quality gate decides.**
 
+![AgentPave Architecture Diagram](docs/images/agentpave-github-social-preview@2x.png)
+
 **A miniature agentic AI developer platform on AWS with QA baked in — one
 command scaffolds a governed agent with evals, guardrails, tracing, and a
 failing-closed CI quality gate.**
@@ -10,6 +12,8 @@ Built in public, one milestone at a time, with
 [Claude Code](https://claude.com/product/claude-code) — following the same
 docs-first, ADR-driven convention as
 [agentic-pii-erasure](https://github.com/andaro74/agentic-pii-erasure).
+
+![AgentPave Architecture Diagram](docs/images/agent-pave-aws-user-friendly-architecture-diagram.png)
 
 ## Status
 

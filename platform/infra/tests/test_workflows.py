@@ -129,6 +129,103 @@ def test_the_gate_does_not_continue_on_error(gate: dict[str, Any]) -> None:
             assert "continue-on-error" not in step
 
 
+# ── the verdict job (ADR-034) ─────────────────────────────────────────────
+#
+# This is the check branch protection requires, so its truth table is the thing
+# standing between a red gate and a merged regression. It is a shell script inside
+# a workflow, which `make check` cannot execute — so these assertions read it.
+
+
+def test_the_verdict_job_exists_and_always_runs(gate: dict[str, Any]) -> None:
+    """`if: always()` is the whole reason it can be a required check.
+
+    Without it, a skipped `deployed` skips the verdict too, and GitHub treats a
+    required check that never runs as permanently pending — the deadlock ADR-034
+    exists to avoid, reintroduced one level up.
+    """
+    verdict = _jobs(gate)["verdict"]
+    assert verdict["if"] == "always()"
+    assert verdict["name"] == "gate verdict"
+
+
+def test_the_verdict_waits_for_every_other_job(gate: dict[str, Any]) -> None:
+    """A verdict that did not depend on a job cannot fail on it.
+
+    Asserted as equality against the rest of the workflow rather than as
+    membership: a job added later and left out of `needs` would be a level whose
+    failure does not block, which is the failure this job exists to prevent.
+    """
+    jobs = _jobs(gate)
+    assert set(jobs["verdict"]["needs"]) == set(jobs) - {"verdict"}
+
+
+def _verdict_script(gate: dict[str, Any]) -> str:
+    (step,) = _steps(_jobs(gate)["verdict"])
+    return str(step["run"])
+
+
+def test_the_verdict_blocks_on_every_non_success(gate: dict[str, Any]) -> None:
+    """Equality against `success`, never a check for `failure`.
+
+    `!= "failure"` would pass a run that was cancelled, timed out, or never
+    started. The concurrency group cancels the older run on a second push, so
+    `cancelled` is a routine outcome here rather than an exotic one, and it must
+    not bank a pass for a commit nobody finished testing.
+    """
+    script = _verdict_script(gate)
+    for var in ("HERMETIC", "CHANGED"):
+        assert f'[ "${var}" = "success" ]' in script, f"{var} is not required to succeed"
+    assert '[ "$DEPLOYED" = "success" ]' in script
+    assert "failure" not in script, "the verdict must test for success, not against failure"
+
+
+def test_the_verdict_requires_the_deployed_levels_when_anything_gradeable_changed(
+    gate: dict[str, Any],
+) -> None:
+    """The blocking path — the one that makes "merge blocked" true."""
+    script = _verdict_script(gate)
+    assert '"$GRADED" = "true"' in script
+    graded_branch = script.split('"$GRADED" = "true"', 1)[1].split("else", 1)[0]
+    assert '[ "$DEPLOYED" = "success" ]' in graded_branch
+
+
+def test_a_skipped_eval_is_only_forgiven_when_the_filter_said_so(gate: dict[str, Any]) -> None:
+    """The honest half of the trade in ADR-034.
+
+    A skip is accepted **only** as `skipped`, and only on the branch where the
+    path filter said nothing gradeable changed. If the deployed job produced any
+    other result there, the filter and the run disagree about what happened, and
+    the verdict blocks rather than guessing which to believe.
+    """
+    script = _verdict_script(gate)
+    else_branch = script.split("else", 1)[1]
+    assert '[ "$DEPLOYED" = "skipped" ]' in else_branch
+    assert "exit 1" in else_branch
+
+
+def test_the_verdict_holds_no_aws_permission(gate: dict[str, Any]) -> None:
+    """It reads three job results and exits. A verdict that could reach AWS would
+    be a second place the gate's outcome could be influenced."""
+    verdict = _jobs(gate)["verdict"]
+    assert "permissions" not in verdict or verdict["permissions"] == {"contents": "read"}
+    assert "id-token" not in yaml.safe_dump(verdict)
+
+
+def test_the_verdict_job_name_is_the_protected_check(gate: dict[str, Any]) -> None:
+    """The name is load-bearing outside this repository.
+
+    Branch protection names the required check as a string GitHub stores, so
+    renaming this job silently un-protects `main` — the rule keeps waiting for a
+    check that no longer exists, and every pull request goes green. Nothing in
+    `make check` can assert the GitHub side; this pins the half that lives here,
+    and ADR-034 records the other half as a known gap.
+    """
+    assert _jobs(gate)["verdict"]["name"] == "gate verdict", (
+        "renaming this job un-protects main — update the branch protection rule "
+        "in the same change, and see ADR-034"
+    )
+
+
 # ── the nightly ───────────────────────────────────────────────────────────
 
 

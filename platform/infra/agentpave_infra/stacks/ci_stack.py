@@ -18,11 +18,17 @@ that scored badly has no way to record itself as the new standard — the failur
 mode `is_recordable` guards against inside the process, closed here in IAM as
 well. Setting the bar stays a deliberate act: a human running
 `make seed-baseline` (ADR-027).
+
+It *can* write one log stream, added in M05 so the dashboard has an eval trend to
+chart (ADR-030). Read the two grants together and they say the thing this role is
+for: **CI may report what it scored, and may not change what counts as good.**
 """
 
 from aws_cdk import CfnOutput, Stack
 from aws_cdk import aws_iam as iam
 from constructs import Construct
+
+from agentpave_infra.log_groups import EVAL_LOG_STREAM, PREFIX
 
 # GitHub's OIDC issuer. The audience is fixed by the official
 # `aws-actions/configure-aws-credentials` action.
@@ -150,6 +156,30 @@ class CiStack(Stack):
             iam.PolicyStatement(
                 actions=["dynamodb:Query"],
                 resources=[f"arn:aws:dynamodb:{self.region}:{self.account}:table/AgentPave-Eval-*"],
+            )
+        )
+
+        # Recording what it measured. The eval harness runs on a GitHub runner,
+        # so its scores reach CloudWatch only if it writes them there (ADR-030),
+        # and the dashboard's eval trend is charted from these lines.
+        #
+        # The pairing with the statement above is the whole design: **CI may say
+        # what it scored and may not say what the bar is.** One action, on one
+        # stream, in one group. Not `logs:*`, not the group without the stream,
+        # and deliberately not `logs:CreateLogStream` — the stream is created by
+        # `EvalStack`, so a run can append to the record and cannot start a
+        # parallel one somewhere the dashboard is not looking.
+        #
+        # The stage is a wildcard because this stack is not stage-suffixed (an
+        # OIDC provider is an account-level singleton). The group prefix and the
+        # stream name are not wildcards.
+        self.ci_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["logs:PutLogEvents"],
+                resources=[
+                    f"arn:aws:logs:{self.region}:{self.account}:log-group:"
+                    f"{PREFIX}/*/eval:log-stream:{EVAL_LOG_STREAM}"
+                ],
             )
         )
 

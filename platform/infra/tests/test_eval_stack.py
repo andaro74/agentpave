@@ -16,14 +16,17 @@ import json
 
 import aws_cdk as cdk
 import pytest
+from agentpave_infra.log_groups import EVAL_LOG_STREAM, eval_log_group
 from agentpave_infra.stacks.eval_stack import EvalStack
 from aws_cdk.assertions import Template
+
+LOG_GROUP = eval_log_group("test")
 
 
 @pytest.fixture(scope="module")
 def template() -> Template:
     app = cdk.App()
-    return Template.from_stack(EvalStack(app, "AgentPave-Eval-test"))
+    return Template.from_stack(EvalStack(app, "AgentPave-Eval-test", log_group_name=LOG_GROUP))
 
 
 def test_baseline_table_is_on_demand(template: Template):
@@ -61,8 +64,10 @@ def test_the_eval_stack_holds_no_bedrock_permission(template: Template):
 
 
 def test_the_eval_stack_creates_no_roles_or_functions(template: Template):
-    """The stack is one table. A Lambda here would be M05's nightly runner
-    arriving early, with a role nobody asked for (ADR-012)."""
+    """The stack is a table and a log group. A Lambda here would be the nightly
+    runner arriving early, with a role nobody asked for (ADR-012) — and the log
+    group deliberately does not come with one: it is written to by the CI role,
+    which lives in `CiStack` where its grants can be asserted together."""
     assert template.find_resources("AWS::IAM::Role") == {}
     assert template.find_resources("AWS::Lambda::Function") == {}
 
@@ -71,3 +76,43 @@ def test_the_table_name_is_published(template: Template):
     """`pave eval --diff` resolves the table from this output; without it the
     diff would need the name hard-coded or guessed."""
     assert "BaselineTableName" in template.to_json()["Outputs"]
+
+
+# ── the scorecard log group ───────────────────────────────────────────────
+
+
+def test_the_scorecard_group_carries_the_name_it_was_given(template: Template):
+    """The dashboard names this group in a query at synth time (ADR-031)."""
+    template.has_resource_properties("AWS::Logs::LogGroup", {"LogGroupName": LOG_GROUP})
+
+
+def test_the_scorecard_group_outlives_a_week(template: Template):
+    """The trend panel's only history.
+
+    The Lambda groups keep a week, which is plenty for debugging a request. This
+    group is the sole source of the eval trend, and a fortnight of nightlies is
+    the shortest window in which the word "trend" means anything — a seven-day
+    retention would silently cap the chart at seven points.
+    """
+    (group,) = template.find_resources("AWS::Logs::LogGroup").values()
+    assert group["Properties"]["RetentionInDays"] >= 30
+
+
+def test_the_stream_exists_so_ci_needs_no_createlogstream(template: Template):
+    """The narrowest write in the platform depends on this resource.
+
+    `CiStack` grants `logs:PutLogEvents` on exactly this stream and deliberately
+    withholds `logs:CreateLogStream`. If the stream stopped being created here,
+    the grant would be correct and useless — every eval run would report a failed
+    telemetry write, and the dashboard would stay flat while the gate stayed
+    green (ADR-027, ADR-030).
+    """
+    template.has_resource_properties("AWS::Logs::LogStream", {"LogStreamName": EVAL_LOG_STREAM})
+
+
+def test_the_group_and_stream_names_are_published(template: Template):
+    """`pave eval` resolves both from stack outputs rather than from environment
+    variables, so a run writes to whatever was last deployed."""
+    outputs = template.to_json()["Outputs"]
+    assert "ScorecardLogGroupName" in outputs
+    assert "ScorecardLogStreamName" in outputs

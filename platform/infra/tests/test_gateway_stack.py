@@ -13,6 +13,7 @@ from typing import Any
 import aws_cdk as cdk
 import pytest
 from agentpave_gateway.guardrail import load_policy
+from agentpave_infra.log_groups import gateway_log_group
 from agentpave_infra.stacks.gateway_stack import GatewayStack
 from aws_cdk.assertions import Match, Template
 
@@ -40,6 +41,7 @@ def template() -> Template:
         asset_path=str(GATEWAY_ASSET),
         model_serve="us.anthropic.claude-haiku-4-5-20251001-v1:0",
         model_judge="us.anthropic.claude-sonnet-4-6",
+        log_group_name=gateway_log_group("test"),
     )
     return Template.from_stack(stack)
 
@@ -137,6 +139,19 @@ def test_the_url_grants_nobody_through_a_resource_policy(template: Template) -> 
 def test_log_group_has_bounded_retention(template: Template) -> None:
     # Never-expiring logs are a slow leak that bills while idle.
     template.has_resource_properties("AWS::Logs::LogGroup", {"RetentionInDays": Match.any_value()})
+
+
+def test_the_log_group_carries_the_name_it_was_given(template: Template) -> None:
+    """The dashboard queries this group by name at synth time (ADR-031).
+
+    A CDK-generated name would synthesise, deploy, and leave the dashboard's
+    spend and guardrail panels permanently empty — the failure mode `log_groups`
+    exists to make impossible. Asserted here so the property belongs to the
+    stack rather than only to the dashboard's drift test.
+    """
+    template.has_resource_properties(
+        "AWS::Logs::LogGroup", {"LogGroupName": gateway_log_group("test")}
+    )
 
 
 # ── guardrail ─────────────────────────────────────────────────────────────

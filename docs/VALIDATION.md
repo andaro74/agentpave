@@ -39,6 +39,16 @@ CI runs the hermetic gates; a human runs everything below.
 
 | 2026-08-12 | M05 | deployed | The gate's first three CI runs — **blocked, denied, then green** | Both failures were the gate working, and both were claims this repo had been making about itself. **Run 1 blocked on its own L0**, three lines after 603 tests passed: `cdk: command not found`, exit 127. `make check` ends in `cdk synth`, which is a Node package the runner did not have. CLAUDE.md says the hermetic gate needs no AWS *account*; it never said no toolchain, and I had read the first as the second an hour earlier and written it into ADR-029 as the justification for keeping `actionlint` out of `make check`. The gate disproved the ADR before it was a day old. **Run 2 was denied `sts:AssumeRoleWithWebIdentity`** with no explanation of which condition failed. The trust policy named `repo:andaro74/agentpave:ref:refs/heads/main` — the form in AWS's documentation and every example. CloudTrail recorded the subject actually presented: `repo:andaro74@3157440/agentpave@1327317546:ref:refs/heads/main`. GitHub issues the claim with immutable numeric ids, so the policy had never had a chance to match, and the two strings can only be compared by reading the one the token carried — which exists in CloudTrail and nowhere else | Fixed at the cause each time. The workflow installs Node and the CDK CLI; `make synth` now checks for `cdk` first and prints the install command, so the next person meets an instruction rather than an errno. The trust policy names the id-bearing subjects only — **not both forms**, because adding the plain one back as a fallback would re-open the hole the ids exist to close, and a login and repository name can be re-registered by someone else where an id cannot. Ids confirmed against `gh api` rather than inferred from one log line. **Run 3 green end to end: L0 hermetic, L2 31/31 diffed at +0.0% against `eval-1786459419-6aaf90`, L5 10/10.** Two things this does not yet prove and the row will not imply: the comment was *written* but never *posted*, because the posting step is scoped to pull requests and all three runs were pushes to main; and no run has yet been blocked by a real regression. Both are Act 2's job |
 
+| 2026-08-12 | M05 | deployed | **Act 2** — the demo pull request ([#1](https://github.com/andaro74/agentpave/pull/1)), left red in history | Two attempts, and the first one is the finding. **"Be concise. Answer in a single short sentence" scored 31/31, +0.0% on every capability, and the gate let it through.** That is the gate being right rather than blind: every fact the golden set grades was still present, the answers were shorter and no less grounded, and a gate that reddened on it would be measuring prose length. It is worth stating because the ROADMAP names "a *be more concise* prompt change" as the thing that gets blocked, and it turns out concision alone is not a quality regression. **The second attempt — "a headline, not a sentence: at most eight words" — blocked at 29/31, −6.5%.** Eight words cannot carry two facts, and the drop was targeted rather than diffuse: `airing` −11.1%, `running` −16.7%, while `summarize` and `enrichment` held at 100%. Enrichment holding is the tell — it answers through `ENRICHMENT_SYSTEM`, which the change never touched. The judge named the failure in its own words: *"The question also asked whether the show is still running, which the answer fails to address properly."* Both attempts passed `make check` — 603 tests, ruff, `cdk synth` — because nothing hermetic can see how long an answer is, which is the entire reason the eval level exists | **The comment carried the judge's rationale twice.** `run_case` records a failing verdict two ways — as an assert-failure string and as the verdict object — and the renderer printed both, so the most persuasive output this platform produces arrived doubled on the one artifact it was written for. The golden test could not have caught it: its fixture carried a verdict with *no* matching assert failure, a shape the harness never produces, so the approved file was approved against a comment that cannot occur. A golden file is only as honest as the inputs whoever wrote the renderer imagined. Fixed at the cause — the string now lives in `judge.judge_failure`, read by both the writer and the filter — and the fixture now carries both, with a test asserting the rationale appears exactly once. The first version of *that* test rebuilt the string with its own f-string and would have kept passing after the writer changed, which is the same defect one level up. **What Act 2 proves, now that all three paths have run: the gate blocks on a regression no hermetic test can see; the comment posts; and it updates in place — one comment across three runs, not three.** The pull request stays open and red |
+
+| 2026-08-12 | M05 | hermetic | Phase 3 built: the dashboard stack, the eval scorecard line, and the CI role's one new grant — `make check` 642 tests, ruff, `cdk synth` over six stacks | Green, and the interesting finding is why the queries are written the way they are. **The handoff's real rows and the intended schema are different documents, and only one of them is queryable.** `blocked_by` is a JSON *array* in the deployed line, so Logs Insights addresses it as `blocked_by.0`; a widget naming the bare field renders a column of blanks and looks exactly like a period with no refusals. Building the panels against the rows quoted in the handoff rather than against `telemetry.py`'s docstring is what caught it, and a test now carries the real row next to the assertion. Two smaller ones found while building: `TREND_WINDOW` was declared, never applied, and described by a comment claiming the trend widget overrode the dashboard default — an untrue comment about a constant nothing read, so the default became a fortnight for every panel instead; and `pave eval` had to stop treating the eval stack as optional-by-omission, since it now resolves the log group there on every run, which must not turn a missing eval stack into a `ValidationError` where grading used to work | Four ADRs rather than the one planned. **030** logs-never-metrics, with the cost stated plainly: no metrics means no alarms, so nothing in this platform can page anybody, and the trend cannot reach further back than retention. **031** log groups named by the app — the option chosen because the two alternatives fail *silently* (a cross-stack import pins the gateway alive; a forgotten environment variable deploys clean and renders four empty widgets, which is M04's failure shape twice over). **032** the leakage counter, answering ARCHITECTURE §7 Q2 by fiat: no production means no honest trigger, deriving one from gate failures is forbidden because a gate that fails is a defect *caught*, and the panel must admit on its face that a person maintains it. **033** `gate-report` cut. The handoff promised Q2 would be answered in ADR-030; it is answered in 032 instead, because the adr-writer skill's own rule is one decision per ADR — noted here so the promise is traceable rather than quietly renumbered. The dashboard's failure mode is invisibility, so the tests do the looking: every query must filter on its event marker, the leakage panel must contain its own admission, and the drift test synthesises the producers and the dashboard together and asserts the groups queried are the groups created |
+
+| 2026-08-12 | M05 | deployed | The dashboard opened by a human — two of the four panels read, and one of them was wrong | **`sum(cost_usd) as cost_usd` renders an empty column.** The spend panel showed `requests` populated and `input_tokens`, `output_tokens` and `cost_usd` all blank beside it: `count() as requests` introduces a new name, while an aggregate aliased to the field it reads is a self-reference Logs Insights does not resolve. The second symptom was the tell — `sort cost_usd desc` on a blank column ordered the table arbitrarily, putting `judge` fifth of six rows despite being 33 of 76 requests and by far the most expensive, since Sonnet judges. **Nothing hermetic could have caught it.** Every existing assertion was about what the query *says*, and it said everything correctly: it filtered on the marker, grouped by `service_id`, and named `sum(cost_usd)`. A Logs Insights query can be syntactically valid, correct in every clause a test can name, and still render nothing — which is the failure class this dashboard was always going to have, and the reason a human opening the page is a gate rather than a formality | Aliases renamed to `tokens_in`, `tokens_out`, `spend_usd`. Two guards added and both mutation-checked against the exact form that shipped: one forbids the self-aliasing pattern in any query, one requires every sort key to name a column the query produces. **The refusal panel's blanks are not a defect and were left alone** — `classification` and `screening` refusals carry no `blocked_by` (only `guardrail` does), so an empty filter column on those two rows is the truth about them, and grouping by `stage` is what keeps them legible. That panel is confirmed working: 7 refusals at `contentPolicy:PROMPT_ATTACK`, 2 classification, 2 screening. **Redeployed and re-read the same day, and the spend panel now reconciles exactly** — which is the standard worth holding a panel to, since "populated" and "correct" are different claims. `airing` 9, `enrichment` 8, `running` 6 are the golden cases one for one; `summarize` 18 is 8 cases plus the 10 probes, which send `feature_id="summarize"`; `judge` 33 is 23 judged cases plus 10 calibration samples, the 8 enrichment cases being `deterministic` and never reaching a judge; the 11 refusals are the 10 probes plus the walkthrough's `guarded`; and `catalog-agent` at 604 in / 5 out / $0.000629 is byte-for-byte the walkthrough row quoted above. The $0.5507 total against the baseline's $0.471934 is not a discrepancy either — a scorecard totals **cases only**, so calibration's judge calls and the probes are real spend the baseline never counted. **The panel's first finding: the judge is 73% of all spend** ($0.4027 of $0.5507), about 3× the serving path — Sonnet judging is the platform's cost, not Haiku answering, and M07's honest-cost section now has a measurement instead of an estimate. **All four panels now read, and the trend is confirmed**: one point, `pass_rate_pct 100`, stamped `2026-08-12T00:00Z` — `bin(1d)` anchors to UTC midnight and the console renders local, so a Pacific reader sees it labelled 08-11 17:00. Left alone: UTC bucketing is correct for a nightly scheduled at 09:00 UTC, and Logs Insights cannot bin in local time. **And the spend panel immediately found something nothing else in the platform would have shown.** Between two readings an hour apart, `airing` went 9→27, `summarize` 18→33, `running` 6→10, while `enrichment` stayed at 8 and refusals stayed at 11. Against the case order (airing → summarize → running → enrichment → probes) only one arrangement fits: two further eval runs, one stopping mid-`running` and one mid-`summarize`, neither reaching enrichment or the probes. The judge count corroborates to the request — +20 calibration (both runs passed it, since calibration runs first) plus 36 judged cases, one having failed deterministically before reaching a judge. **That reading was wrong, and the correction is the more useful finding.** ~~Those two runs cost ~$0.95 and wrote no scorecard line.~~ Investigated the same day against the raw rows: the two runs were **two concurrent CI runs in flight at the moment of the screenshot** — `quality gate [push/main]` 15:14:47→15:20:24Z and `nightly eval [workflow_dispatch]` 15:14:57→15:19:54Z, both completed, both successful. The counts settled at `airing` 27, `enrichment` 24, `running` 18 and 51 refusals, which is two full gate invocations: each runs the 10 probes in L2 *and* again in L5, so 20 probes per invocation. Nothing was interrupted and nothing was wasted. **The property worth keeping is the one that fooled the reading: a Logs Insights panel over an append-only log cannot distinguish a run in flight from a run that stopped.** No column says "still going", the numbers are simply lower than they will be, and a partial snapshot is indistinguishable from a partial failure. The mistake was mine and it was cheap, but the same reading of a real incident would have sent someone chasing a defect that did not exist — so the correct move on a suspicious panel is to check the run history before the log rows, which is what settled it here |
+
+| 2026-08-12 | M05 | deployed | **Act 2 reviewed by a human** — PR [#1](https://github.com/andaro74/agentpave/pull/1) read and confirmed on the pull request itself, not by the agent that drove it | The comment holds up on every point that matters, and two of them can only be checked by eye. **29/31, −6.5%**, with `airing` −11.1% and `running` −16.7% while `summarize` and `enrichment` hold at 100% — targeted, not diffuse, and `enrichment` holding is the tell since it answers through a prompt the change never touched. **The judge's rationale appears exactly once**, which is the M05 defect whose golden test could not have caught it. **One bot comment, created `11:20:14Z` and updated `11:38:54Z`** — update-in-place proven by timestamps rather than asserted. Adversarial 10/10; cost fell $0.0085, consistent with shorter answers. Two findings worth more than the verdict. **The regression landed on the two most carefully curated cases in the set**: `airing-severance-status`, the deliberately-ungroundable case whose rewrite was reverted in Phase 1 because it is the dataset's only measurement of "say you don't know" — eight words cannot decline half a question — and `running-count-of-running`, which failed on `must_contain: 'Severance'`, *bait added during that same curation pass*. The 23% edit rate paid for itself four days later. And **`airing-schedule-abc-overnight` passed again**, one more clean run behind that unexplained tone flake | **One gap, now confirmed rather than suspected: `main` has no branch protection** — `gh api .../branches/main/protection` returns `404 Branch not protected`, which is the evidence. (`gh pr view --json mergeable` returning `MERGEABLE` was quoted alongside it and is *not* evidence of anything: that field reports merge **conflicts** only, never protection state. `mergeStateStatus` is the field that reflects protection, and it was not captured before the rule was applied.) GitHub allowed the merge with the eval level red. ROADMAP M05 calls the demo PR "**blocked** by the eval gate" and ARCHITECTURE's Act 2 says "merge blocked"; what is true today is that the gate *reports*, the comment posts, and a human declines to merge. Turning protection on is not a one-liner either: requiring the `L2 eval + L5 adversarial` check collides with ADR-028's path filter, because that job is conditional and GitHub treats a required check that never runs as permanently pending — so every docs-only pull request, including the ones closing this milestone, would deadlock. **Undecided, and M05 cannot close either way without saying so**: make the filter run inside the job so the check always reports (a workflow change plus an ADR), or restate the claim in the README's known limits as reporting rather than blocking |
+
+| 2026-08-12 | M05 | deployed | Phase 3 verified end to end from the log rows and the run history, after the panel reading above was called into question | **Everything works, and the one claim that could only be tested from CI is now tested.** Three scorecard lines exist, one per origin: `local` 13:50:23Z, `nightly eval` 15:15:11Z, `quality gate` 15:15:37Z — all 31/31 cases, 10/10 probes. **Both CI lines were written by `AgentPave-Ci` through `logs:PutLogEvents` on one stream**, holding no `logs:CreateLogStream` and no `dynamodb:PutItem`. A laptop run proves nothing about that grant, because a developer profile carries broad permissions; only a run on a GitHub runner does, and two have. The trend rendering as a single point is correct rather than a symptom — all three share a UTC day, and `bin(1d)` with `max(pass_rate)` collapses them by design. Incidental and worth recording: **31/31 three times at $0.472279 / $0.472234 / $0.472039, within 0.05% across a laptop and two GitHub runners.** ADR-016's pinned temperature has been reproducible across runs on one machine since M03; this is the first evidence it holds across machines | Nothing to fix. Two rows above were corrected rather than left standing — the "$0.95 with nothing to show for it" was runs in flight, and the nightly had already fired. **What remains for M05 is one decision, not one defect**: `main` is unprotected, so the milestone's "merge blocked" claim is not yet true, and requiring the deployed check collides with ADR-028's path filter. Also worth stating for whoever runs these commands next: on Git Bash, a log group name beginning with `/` is rewritten into a Windows path before the AWS CLI ever sees it, and the call fails on a regex that the name actually satisfies. `MSYS_NO_PATHCONV=1` is the fix, and it cost a confused minute here |
+
 ## M04 AgentCore-migration checklist (per ADR-003)
 
 To be checked at M04 review; each item keeps the Lambda→AgentCore path a
@@ -193,6 +203,144 @@ re-read more charitably.
   might. ADR-026's first draft deferred the work to M06 instead — a milestone
   marked `(stretch)` whose own roadmap entry contemplates shipping without it,
   which would have repeated the mistake it was written to correct.*
+
+## M05 status — where the milestone stands
+
+Written as a handoff. The rows above record what was found; this records what
+is done, what is not, and what someone picking this up needs to know that is
+not derivable from the code.
+
+### Phases
+
+- **Phase 1 — curate and seed the baseline. Done.** 31 golden cases, 10
+  calibration samples, 10 probes, all 5 fixtures graded. Baseline
+  `eval-1786459419-6aaf90` at 31/31, $0.471934. `make seed-baseline` is
+  implemented and is the only way the bar moves.
+- **Phase 2 — the gate in CI. Done and green.** `pave gate` runs the ladder
+  from a `gate.yml`; `.github/workflows/gate.yml` and `nightly-eval.yml` call
+  it. OIDC role `AgentPave-Ci` deployed, repository variable `AWS_CI_ROLE_ARN`
+  set. Third CI run was green end to end.
+- **Phase 3 — dashboard and nightly. Built hermetically; not yet deployed.**
+  Everything in the list below is written, tested and committed; nothing in it
+  has run against AWS. The gateway's structured line was **deployed and verified
+  in CloudWatch** on 2026-08-12, in a log group that no longer exists — ADR-031
+  renamed it to `/agentpave/dev/gateway`, which replaces the group and discards
+  the rows. The schema they proved is unchanged and the queries were written
+  against them, so the evidence did its job before it expired; the deployed gate
+  refills both groups. The rows, for the record —
+
+  ```
+  {"event": "agentpave.gateway.request", ..., "outcome": "served",
+   "model_id": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+   "input_tokens": 604, "output_tokens": 5, "cost_usd": 0.000629}
+  {"event": "agentpave.gateway.request", ..., "outcome": "refused",
+   "stage": "guardrail", "blocked_by": ["contentPolicy:PROMPT_ATTACK"],
+   "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0}
+  ```
+
+  Which was worth having: `blocked_by` is an **array**, so the refusal panel
+  addresses it as `blocked_by.0`. Written against the intended schema instead,
+  that widget would have rendered a column of blanks and read as a period with
+  no refusals.
+- **Phase 4 — Act 2. Done.** PR
+  [#1](https://github.com/andaro74/agentpave/pull/1) is open and red, with the
+  gate's comment on it. Deliberately not merged.
+
+### What Phase 3 needed — done hermetically, 2026-08-12
+
+1. ~~A log group in `EvalStack` for scorecard lines, and `pave eval` writing
+   one.~~ **Done.** `/agentpave/dev/eval`, three-month retention, with a
+   pre-created `scorecards` stream. `evalsvc/telemetry.py` writes one flat line
+   per graded run — summary numbers only, no answers or case ids — and reports
+   a failed write loudly without changing the run's exit code.
+2. ~~The CI role gaining `logs:PutLogEvents` on that group alone.~~ **Done**, and
+   narrower than asked: the grant names the one *stream*, not the group, and
+   deliberately withholds `logs:CreateLogStream` — which is why `EvalStack`
+   creates the stream. `dynamodb:PutItem` is still absent, with tests asserting
+   the role also cannot delete a log stream: erasing the run that scored badly
+   is the same laundering as writing a baseline, reached another way.
+3. ~~The dashboard stack.~~ **Done.** One dashboard, four panels, no custom
+   metrics (ADR-030).
+4. ~~**ADR-030**.~~ **Done, as four ADRs — 030 through 033.** Q2 is answered in
+   **ADR-032**, not 030; see the row above for why the split, so the handoff's
+   promise is traceable rather than silently renumbered.
+5. ~~The nightly has **still never fired.**~~ **Closed 2026-08-12: it has fired
+   twice, and one of them was the schedule rather than a human.**
+   `nightly eval [schedule/main]` ran at 09:28Z (GitHub's cron lag on a 09:00
+   schedule) and `[workflow_dispatch]` at 15:14Z, both successful. Its gateway
+   rows from the 09:28Z run are gone, because the rename replaced that group
+   afterwards — consistent, not missing.
+
+### What is left, and it is all deployed work
+
+None of Phase 3 has run against AWS. In order, and **by a human** — the
+definition of done asks for a witness who is not the agent that wrote the fix:
+
+1. `make deploy-dev`. This **replaces** the gateway log group (ADR-031) and
+   creates `AgentPave-Dashboard-dev`. Expect CloudFormation to delete the old
+   group; that is the rename, not a fault.
+2. `make walkthrough` — refills `/agentpave/dev/gateway` with both row shapes,
+   served and refused, so the spend and guardrail panels have data.
+3. `make eval` — writes the first scorecard line. Watch for
+   `wrote the scorecard line to /agentpave/dev/eval`; the alternative message
+   names the group and stream it tried.
+4. Open `AgentPave-dev` in CloudWatch and check all four panels. **Partly done
+   2026-08-12** — see the row above. The spend and refusal panels have been read
+   and the spend panel was wrong; the fix needs
+   `cdk deploy AgentPave-Dashboard-dev`, which is cheap and needs no eval re-run
+   because the rows are already in the group. **The eval trend has still never
+   been read.** Validate any suspect panel with `aws logs start-query` before
+   assuming the data is missing — an empty table and a wrong query look
+   identical, which is exactly how the spend panel failed.
+5. `gh workflow run nightly-eval.yml`, then confirm the trend gains a point with
+   `origin: "nightly eval"`. Real spend: an eval run is ~$0.47 plus judge calls.
+
+### Open threads a new session will not infer
+
+- ~~**`.claude/skills/gate-report/` does not exist.**~~ **Closed 2026-08-12: cut,
+  with ADR-033.** `pr_comment.py` renders the comment from pure data with a
+  golden-output test, and a gate's explanation of why it blocked has to be
+  byte-identical across runs — a blocked developer reads it twice, once when it
+  fails and once after the fix. The two surviving skills are authoring tools
+  whose output a human curates before it lands; nobody curates a CI comment.
+  ARCHITECTURE §4 and §6 updated so nothing is listed and absent.
+- **The `airing-schedule-abc-overnight` tone flake has no explanation.** It
+  failed once in five runs on tone=3 with groundedness and completeness at 5. A
+  prompt clause was added and six consecutive runs have been clean — but at the
+  observed rate, six clean runs would happen about a quarter of the time even
+  if the clause did nothing. It is a plausible fix, not a proven one. If it
+  reddens a gate later, the next move is not another prompt tweak: it is
+  deciding whether a stylistic axis should block a pull request at all.
+- **ADR-028's path filter leaks on `templates/`.** A template edit can change
+  how a scaffolded service asks its question, which can move that service's
+  scores, and `templates/` is outside the filter — so it ships ungraded.
+  Nothing enforces that whoever widens the template widens the filter.
+- **The adversarial suite tests no tool authorization** (ADR-026). A pull
+  request widening a Cedar policy passes every level of this ladder. M07's
+  close must resolve it or restate it in the README's known limits.
+- **M06 stays** (decided 2026-08-12). ADR-001 and ARCHITECTURE still describe
+  it as a stretch milestone, which is consistent — but the decision to keep it
+  was made in conversation and is recorded nowhere else until this line.
+
+- **The dashboard's own panels were the thing least verified in this milestone,
+  and the first look found a defect.** Every other claim here had been run: the
+  gate blocked, the comment posted, the baseline seeded, the spans read out of a
+  log group. The three query panels had only been asserted at synth — and the
+  spend panel was wrong in a way no synth assertion could reach (see the
+  2026-08-12 deployed row). Two of three query panels have now returned rows
+  somebody recognised; **the eval trend has not**, so treat it as untested. The
+  general lesson is cheap to state and was expensive to learn twice in one day:
+  for a Logs Insights panel, "the query is correct" and "the query returns what
+  you meant" are different claims, and only the second one is worth anything.
+
+### Before M05 can close
+
+Both gates green, ADRs written (**026–033, all written**), the deployed gate
+**run by a human rather than by an agent**, this file updated, and an `M05` tag.
+Act 2 is demonstrated but was driven by the agent; a human still has to look at
+PR #1 and the dashboard and say they work. Phase 3's deployed sequence — the five
+steps above, starting with a `make deploy-dev` that replaces a log group — has
+not been run at all.
 
 ## Ad-hoc reviews
 
