@@ -35,6 +35,11 @@ EXCLUDED_SUFFIXES = (".md.j2",)
 
 _LINK = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)")
 _FENCE = re.compile(r"^\s*(```|~~~)")
+# An inline code span renders as literal text, so `[x](y)` inside backticks is
+# not a link and must not be resolved. Found the honest way: this file's own
+# review log quotes the broken link used to demonstrate the checker's teeth,
+# and the checker dutifully reported it as broken documentation.
+_CODE_SPAN = re.compile(r"`[^`]*`")
 _LINE_ANCHOR = re.compile(r"^L(\d+)(?:-L(\d+))?$")
 
 _EXTERNAL_SCHEMES = ("http://", "https://", "mailto:")
@@ -65,7 +70,7 @@ def _strip_fences(text: str) -> list[tuple[int, str]]:
             inside = not inside
             lines.append((n, ""))
             continue
-        lines.append((n, "" if inside else line))
+        lines.append((n, "" if inside else _CODE_SPAN.sub("", line)))
     return lines
 
 
@@ -156,6 +161,19 @@ def test_the_checker_catches_a_link_that_resolves_only_on_the_authors_disk() -> 
 def test_the_checker_ignores_links_inside_fenced_code() -> None:
     text = "```\n[not a link](nowhere.md)\n```\n"
     assert broken_links("README.md", text, tracked=set()) == []
+
+
+def test_the_checker_ignores_a_link_quoted_in_an_inline_code_span() -> None:
+    """Backticks render the link as literal text, so it is not a link.
+
+    This is the case the review log needed: describing the mutation that proves
+    this checker has teeth means quoting a deliberately broken link, and the
+    first version of the checker reported the description as a defect.
+    """
+    text = "Appending `[a doc that does not exist](docs/NOPE.md)` turns the gate red."
+    assert broken_links("docs/VALIDATION.md", text, tracked=set()) == []
+    # …and the same link outside backticks is still caught.
+    assert broken_links("docs/VALIDATION.md", text.replace("`", ""), tracked=set())
 
 
 def test_the_checker_catches_a_line_anchor_past_the_end_of_the_file() -> None:
