@@ -206,11 +206,11 @@ re-read more charitably.
   marked `(stretch)` whose own roadmap entry contemplates shipping without it,
   which would have repeated the mistake it was written to correct.*
 
-## M05 status — where the milestone stands
+## M05 status — closed 2026-08-12, tag `M05`
 
-Written as a handoff. The rows above record what was found; this records what
-is done, what is not, and what someone picking this up needs to know that is
-not derivable from the code.
+Written as a handoff and kept as a record now that the milestone is closed. The
+rows above record what was found; this records what was done. **For the next
+session, read "M06 — the handoff" at the end of this file instead.**
 
 ### Phases
 
@@ -354,6 +354,100 @@ spot (M07 scope), the tone flake on `airing-schedule-abc-overnight` with a
 plausible but unproven fix, ADR-028's path filter leaking on `templates/`, and
 ADR-026's untested tool authorization. All four are listed above as open threads
 and all four must be resolved or restated in M07's known limits.
+
+## M06 — the handoff
+
+Written the same way M05's was: what is true, what is not, and what a new session
+cannot infer from the code. **M05 is closed** — tag `M05` on `3c4da72`, both gates
+green, ADRs 026–034, deployed gate witnessed by a human.
+
+### Where the platform stands
+
+Six stacks deployed in `us-west-2`, nothing billing while idle: `Gateway`, `Mcp`,
+`Eval`, `Dashboard`, `Ci`, `Service-CatalogAgent`. Dashboard `AgentPave-dev` reads
+`/agentpave/dev/gateway` (7-day retention) and `/agentpave/dev/eval` (90-day).
+`main` requires one status check, `gate verdict`. The eval trend holds five
+scorecard lines across two UTC days and currently shows 100 → 93.5.
+
+### Three facts that will bite
+
+1. **`make eval` carries `--save-baseline`.** Any passing local run moves the bar.
+   The baseline is now `eval-1786542623-d4423c` (31/31), not the seeded
+   `eval-1786459419-6aaf90`. Use `pave eval --diff` alone to measure without
+   recording.
+2. **Renaming the `verdict` job silently un-protects `main`.** The required check
+   is the string `gate verdict`, stored in a GitHub rule outside this repository.
+   A test pins the name here; nothing can pin the GitHub side (ADR-034).
+3. **PR [#1](https://github.com/andaro74/agentpave/pull/1) must stay open and
+   red.** Its head is `fc1a194`, which now carries a merge commit from `main`. It
+   is Act 2's artifact.
+
+### M06's first decision, and it collides with two standing commitments
+
+ROADMAP M06 runs **Claude Code headless in CI** (`selfheal.yml`). The obvious
+implementation needs an Anthropic API key in a repository secret — which
+CLAUDE.md standing rule 3 forbids ("there are no API keys in this project… if you
+think you need a secret, stop and ask") and ADR-027 rejects for AWS on the grounds
+that a key in a secret exists whether or not a workflow is running.
+
+**Do not resolve this by adding the secret.** The candidate worth costing first is
+pointing Claude Code at Bedrock (`CLAUDE_CODE_USE_BEDROCK=1`), which would run it
+on the CI role's OIDC credentials and keep both commitments intact — the gateway's
+own routing is already Bedrock-only. Whatever is decided is an ADR before it is
+code, and note the invariant it strains either way: ARCHITECTURE invariant 1 says
+every model call goes through the gateway, and a headless Claude Code in CI is a
+model call that does not.
+
+### What M06 asks for
+
+- `selfheal.yml`: on a contract-test failure with a schema-diff signature, run
+  Claude Code headless and open an `ai-proposed` PR with the repaired test and its
+  reasoning. Human review mandatory — propose/dispose.
+- `pave shadow-eval`: candidate vs. incumbent on the golden set. Currently fails
+  loudly via `NOT_YET` in `pave/agentpave_pave/cli.py`; that is the only remaining
+  not-yet verb.
+- **Hermetic gate:** the trigger classifier unit-tested (real defect vs. schema
+  drift — the distinction is the whole design), and the shadow-eval comparator
+  unit-tested.
+- **Deployed gate:** a staged schema change produces an `ai-proposed` PR that a
+  human approves. Act 3, recordable.
+- **If it slips:** ship without it and record the design as an ADR marked *next*.
+  ROADMAP says so explicitly. **M06 stays** (decided 2026-08-12) — ADR-001 and
+  ARCHITECTURE still describe it as a stretch, which is consistent.
+
+### Environment traps, all paid for once already
+
+- **Git Bash rewrites arguments starting with `/`** into Windows paths before the
+  program sees them, and it mangles `ref:path` colons too. `MSYS_NO_PATHCONV=1`
+  fixes both. It cost a bogus "regex" error from `aws logs` and a bogus "this tag
+  is not on origin/main" conclusion in the same session.
+- **Windows filesystems are case-insensitive**, so `git tag -a M05` collided with
+  an existing lowercase `m05` and reported "already exists" while `git tag -l`
+  showed only the lowercase name.
+- `gh pr update-branch` does not exist in the installed `gh`; use
+  `gh api -X PUT repos/<owner>/<repo>/pulls/<n>/update-branch`.
+- `gh pr view --comments` fails on a Projects-classic deprecation; read comments
+  with `gh api repos/<owner>/<repo>/issues/<n>/comments`.
+
+### Still open, and each must be resolved or restated at M07
+
+- The judge's **near-miss blind spot** — reproducible, and *not* fixable by prompt
+  wording (measured in M03). Needs a claim-extraction pass or a groundedness-only
+  second judge. M07 scope.
+- **`airing-schedule-abc-overnight`'s tone flake** — one failure in five runs, a
+  prompt clause added, then clean. At the observed rate the clean streak would
+  happen about a quarter of the time even if the clause did nothing. A plausible
+  fix, not a proven one. If it reddens a gate, the next move is not another tweak:
+  it is deciding whether a stylistic axis should block a pull request at all.
+- **ADR-028's path filter leaks on `templates/`.** A template edit can move a
+  scaffolded service's scores and ships ungraded. Nothing enforces that whoever
+  widens the template widens the filter.
+- **ADR-026: the adversarial suite tests no tool authorization.** A pull request
+  widening a Cedar policy passes every level of the ladder. Closing it needs a
+  driver that sends through the agent rather than the gateway.
+- **ADR-034's un-assertable half** — the branch protection rule is applied by hand
+  with `gh api`, is not in version control, and would not survive recreating the
+  repository.
 
 ## Ad-hoc reviews
 
