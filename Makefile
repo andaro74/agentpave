@@ -62,10 +62,16 @@ diagrams: ## Render docs/diagrams/*.mermaid to SVG — needs Node, not part of m
 		echo "✋ npx is not on PATH — 'make diagrams' renders with mermaid-cli"; \
 		echo "   install Node 18+: https://nodejs.org/"; \
 		exit 1; }
+	@# -c is load-bearing: it sets htmlLabels:false. The default wraps every
+	@# label in a <foreignObject> of HTML, which GitHub's sanitiser strips — the
+	@# diagram then renders as correctly-shaped boxes with no text in them, on
+	@# the one surface it exists for, while looking perfect locally and in any
+	@# PNG export. A test asserts the committed SVG carries no foreignObject.
 	@set -e; for src in docs/diagrams/*.mermaid; do \
 		out="$${src%.mermaid}.svg"; \
 		echo "rendering $$src → $$out"; \
-		npx -y @mermaid-js/mermaid-cli@11 -i "$$src" -o "$$out" -b transparent; \
+		npx -y @mermaid-js/mermaid-cli@11 -i "$$src" -o "$$out" \
+			-c docs/diagrams/mermaid-config.json -b transparent; \
 	done
 	@echo "✅ diagrams rendered — commit the .svg alongside the .mermaid"
 

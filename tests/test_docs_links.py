@@ -195,6 +195,32 @@ def test_every_diagram_source_has_a_committed_svg() -> None:
     )
 
 
+def test_no_rendered_diagram_hides_its_labels_in_a_foreignobject() -> None:
+    """The render must survive GitHub, which is the only place it is displayed.
+
+    mermaid-cli's default puts every label inside a `<foreignObject>` of HTML.
+    GitHub's markdown sanitiser strips those, so the SVG displays as
+    correctly-shaped boxes containing **no text at all** — while rendering
+    perfectly in every local viewer, in any PNG export, and in the browser the
+    renderer itself used. The first committed render of this repository's
+    diagram had 66 of them and zero `<text>` elements.
+
+    `docs/diagrams/mermaid-config.json` sets `htmlLabels: false`, and this is
+    what stops a future render silently dropping it: the config is one flag on
+    one command line, and nothing else would notice.
+    """
+    svgs = sorted(p for p in _tracked() if p.endswith(".svg") and p.startswith("docs/diagrams/"))
+    assert svgs, "no rendered diagrams found — this guard would pass by having nothing to check"
+
+    for svg in svgs:
+        markup = (REPO / svg).read_text(encoding="utf-8")
+        assert "foreignObject" not in markup, (
+            f"{svg} carries HTML labels GitHub will strip — re-run `make diagrams`, "
+            "which passes docs/diagrams/mermaid-config.json"
+        )
+        assert "<text" in markup, f"{svg} contains no <text> elements — its labels are not there"
+
+
 @pytest.mark.parametrize("doc", ["README.md", "docs/ARCHITECTURE.md", "docs/ROADMAP.md"])
 def test_the_documents_the_roadmap_names_are_present(doc: str) -> None:
     """A link checker passes trivially on a tree that lost its documents."""

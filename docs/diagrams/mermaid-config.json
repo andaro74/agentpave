@@ -1,0 +1,6 @@
+{
+  "//": "htmlLabels:false is not cosmetic. mermaid-cli's default renders every label inside a <foreignObject> holding HTML, which GitHub's markdown sanitiser strips — the SVG then displays as correctly-shaped boxes containing no text at all, while rendering perfectly in any local viewer and in any PNG export. Labels must be real <text> elements to survive publication. tests/test_docs_links.py asserts the committed SVG contains none.",
+  "htmlLabels": false,
+  "flowchart": { "htmlLabels": false, "useMaxWidth": true },
+  "themeVariables": { "fontFamily": "ui-sans-serif, system-ui, sans-serif" }
+}
