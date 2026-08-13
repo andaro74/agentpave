@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 from agentpave_evalsvc.judge import JUDGE_FEATURE
-from agentpave_evalsvc.models import CaseResult, Scorecard
+from agentpave_evalsvc.models import CaseResult, JudgeVerdict, Scorecard
 from agentpave_evalsvc.shadow import candidate_caller, compare, observing_caller, render
 from agentpave_gateway.routing import SHADOW_CANDIDATE_FEATURE
 
@@ -23,13 +23,26 @@ HAIKU = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 SONNET = "us.anthropic.claude-sonnet-4-6"
 
 
-def _case(case_id: str, *, capability: str = "airing", passed: bool = True, cost: float = 0.01):
+_VERDICT = JudgeVerdict(groundedness=5, completeness=5, tone=5, rationale="fine")
+
+
+def _case(
+    case_id: str,
+    *,
+    capability: str = "airing",
+    passed: bool = True,
+    cost: float = 0.01,
+    judged: bool = False,
+):
     return CaseResult(
         case_id=case_id,
         capability=capability,  # type: ignore[arg-type]
         passed=passed,
         latency_ms=100,
         cost_usd=cost,
+        # Defaults to unjudged so both arms of every other test carry the same
+        # count and the judging note stays out of their rendered output.
+        verdict=_VERDICT if judged else None,
     )
 
 
@@ -406,3 +419,75 @@ def test_a_prompt_change_is_declared_in_the_report() -> None:
     rendered = render(compare(incumbent, candidate, prompt_changed=True))
 
     assert "different serving prompt" in rendered
+
+
+# ── the cost delta is not independent of the outcomes ──────────────────────
+#
+# A failing case skips its judge call, so a worse arm is a cheaper arm. On the
+# first comparable deployed run the six regressions saved more judging than the
+# candidate's extra serving cost, and the report printed `cost -0.010189 USD`
+# with nothing to say the saving *was* the failures.
+
+
+def test_judge_verdicts_are_counted_per_arm() -> None:
+    incumbent = _card("run-a", [_case("a", judged=True), _case("b", judged=True)])
+    candidate = _card("run-b", [_case("a", judged=True), _case("b", passed=False)])
+
+    report = compare(incumbent, candidate)
+
+    assert report.incumbent_judged == 2
+    assert report.candidate_judged == 1
+    assert not report.judged_evenly
+
+
+def test_uneven_judging_qualifies_the_cost_line() -> None:
+    """The confound is named where the misreading happens.
+
+    A reader who takes `cost -0.01 USD` from a report with six regressions has
+    read a symptom of the failures as a benefit of the candidate.
+    """
+    incumbent = _card("run-a", [_case("a", judged=True, cost=0.05)])
+    candidate = _card("run-b", [_case("a", passed=False, cost=0.01)])
+
+    rendered = render(compare(incumbent, candidate))
+
+    assert "judge verdicts: incumbent 1, candidate 0" in rendered
+    assert "not charged for the same work" in rendered
+
+
+def test_even_judging_says_nothing() -> None:
+    """No note when there is nothing to qualify — a caveat that always prints
+    is a caveat nobody reads."""
+    incumbent = _card("run-a", [_case("a", judged=True)])
+    candidate = _card("run-b", [_case("a", judged=True)])
+
+    rendered = render(compare(incumbent, candidate))
+
+    assert "judge verdicts" not in rendered
+
+
+def test_the_note_is_symmetric_about_which_arm_judged_less() -> None:
+    """An incumbent that skipped judge calls is the same confound reversed, and
+    a report that only warned in one direction would flatter the candidate."""
+    incumbent = _card("run-a", [_case("a", passed=False)])
+    candidate = _card("run-b", [_case("a", judged=True)])
+
+    rendered = render(compare(incumbent, candidate))
+
+    assert "judge verdicts: incumbent 0, candidate 1" in rendered
+
+
+def test_uneven_judging_does_not_make_the_pair_incomparable() -> None:
+    """Uneven judging is caused by the pass rates, not a threat to them.
+
+    Folding it into `comparable` would suppress the deltas — and the
+    regressions that produced the imbalance are exactly what the reader came
+    for. It qualifies the cost line and nothing else.
+    """
+    incumbent = _card("run-a", [_case("a", judged=True), _case("b", judged=True)])
+    candidate = _card("run-b", [_case("a", judged=True), _case("b", passed=False)])
+
+    report = compare(incumbent, candidate)
+
+    assert report.comparable
+    assert not report.shippable, "the regression still sinks it"

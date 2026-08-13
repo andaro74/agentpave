@@ -80,6 +80,24 @@ class ShadowReport(_Strict):
     pass_rate_delta: float
     cost_delta_usd: float
     by_capability_delta: dict[str, float]
+    # How many cases each arm actually got a judge verdict for.
+    #
+    # These exist to keep `cost_delta_usd` from being read as a saving. A case
+    # that fails a deterministic assert is never sent to the judge — the verdict
+    # could not change the outcome and Sonnet is not free (`harness.run_case`) —
+    # so a failing arm skips judge calls and comes out *cheaper*. The judge is
+    # handed the whole capped source plus the answer, which on this dataset's
+    # large fixtures is the most expensive single call in a case, and the
+    # skipped-judge saving can exceed the candidate's extra serving cost
+    # outright.
+    #
+    # That is what the first comparable deployed run did: six regressions and a
+    # cost delta of -$0.010189, which reads as a quality-for-price trade and is
+    # nothing of the sort. It is the same fact counted twice. Two counts print
+    # instead of a caveat because the confound has a size, and a number the
+    # reader can subtract beats a sentence asking them to be careful.
+    incumbent_judged: int = 0
+    candidate_judged: int = 0
 
     outcomes: tuple[CaseOutcome, ...]
     # Cases present in one arm and not the other. Never empty for a benign
@@ -110,6 +128,17 @@ class ShadowReport(_Strict):
     @property
     def improvements(self) -> tuple[str, ...]:
         return tuple(o.case_id for o in self.outcomes if o.moved and not o.regressed)
+
+    @property
+    def judged_evenly(self) -> bool:
+        """Whether both arms were charged for the same amount of judging.
+
+        Deliberately *not* folded into `comparable`. Uneven judging does not
+        invalidate the pass rates — it is caused by them — and suppressing the
+        deltas would hide the regressions that produced it. It qualifies the
+        cost line only, so it is reported next to the cost line only.
+        """
+        return self.incumbent_judged == self.candidate_judged
 
     @property
     def comparable(self) -> bool:
@@ -278,6 +307,12 @@ def compare(
         pass_rate_delta=round(candidate.pass_rate - incumbent.pass_rate, 6),
         cost_delta_usd=round(candidate.total_cost_usd - incumbent.total_cost_usd, 6),
         by_capability_delta={cap: round(after[cap] - before[cap], 6) for cap in shared_caps},
+        # A verdict is present exactly when a judge call succeeded: a case that
+        # failed a deterministic assert was never sent, and a case whose judge
+        # errored records the failure and leaves this None. Both are cases the
+        # arm was not billed a judge call for, which is what the count is for.
+        incumbent_judged=sum(1 for c in incumbent.cases if c.verdict is not None),
+        candidate_judged=sum(1 for c in candidate.cases if c.verdict is not None),
         outcomes=outcomes,
         only_incumbent=tuple(sorted(set(incumbent_cases) - set(candidate_cases))),
         only_candidate=tuple(sorted(set(candidate_cases) - set(incumbent_cases))),
@@ -301,6 +336,21 @@ def render(report: ShadowReport) -> str:
     lines.append(f"    cost {report.cost_delta_usd:+.6f} USD")
     for cap, delta in sorted(report.by_capability_delta.items()):
         lines.append(f"    {cap}: {delta:+.1%}")
+    if not report.judged_evenly:
+        # Printed next to the cost line it qualifies, and printed as two counts
+        # rather than as a warning: the reader can size the confound themselves.
+        # Direction is not branched on — an incumbent that skipped judge calls
+        # is the same confound pointing the other way.
+        lines.append("")
+        lines.append(
+            f"  ! judge verdicts: incumbent {report.incumbent_judged}, "
+            f"candidate {report.candidate_judged}"
+        )
+        lines.append(
+            "    a case that fails a deterministic assert is never judged, so the "
+            "arms were not charged for the same work — that cost delta is partly "
+            "the failures, not the candidate"
+        )
     lines.append("")
 
     if report.improvements:
