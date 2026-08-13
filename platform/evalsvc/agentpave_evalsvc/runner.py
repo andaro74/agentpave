@@ -140,6 +140,20 @@ def _live_scorer(call: Caller, dataset: Dataset):
     return score
 
 
+def _served(seen: set[str]) -> str:
+    """Name the model an arm was served by, from what was observed.
+
+    More than one is not an error to swallow: a mid-run routing change or a
+    partly-deployed gateway would produce it, and both are things the reader
+    needs to see rather than have averaged away.
+    """
+    if not seen:
+        # No successful completion carried a model id. Distinct from a wrong
+        # name, and it must not read like one.
+        return "unobserved"
+    return " + ".join(sorted(seen))
+
+
 def run_shadow(
     dataset: Dataset,
     *,
@@ -165,12 +179,16 @@ def run_shadow(
         return 1
 
     call = _signed_caller(url)
-    incumbent_model = outputs.get("ModelServe", "unknown")
-    # The capable model serves the judge and the shadow candidate alike, so the
-    # gateway's `ModelJudge` output names it. Read through the routing table
-    # rather than guessed: the candidate is a *feature*, and this output is
-    # what that feature resolves to (ADR-036).
-    candidate_model = outputs.get("ModelJudge", "unknown") if vary_model else incumbent_model
+
+    # Which model each arm was *actually* served by, collected from the response
+    # bodies as the runs happen. The first deployed shadow run named two models
+    # in its header and ran both arms on one: the labels came from stack outputs
+    # and a boolean, so they described the configuration rather than the run,
+    # and a gateway deployed before the candidate feature existed routed it to
+    # the fast model exactly as routing rule 2 says it will. Configuration is
+    # not evidence; the response body is.
+    incumbent_seen: set[str] = set()
+    candidate_seen: set[str] = set()
 
     print("shadow eval runs the golden set twice — roughly double an eval run's cost.\n")
 
@@ -189,33 +207,45 @@ def run_shadow(
 
     incumbent = run(
         dataset,
-        call,
+        shadow_mod.observing_caller(call, incumbent_seen),
         run_id=f"shadow-incumbent-{stamp}-{uuid.uuid4().hex[:6]}",
         created_at=created_at,
-        model_serve=incumbent_model,
+        model_serve="unobserved",
         model_judge=outputs.get("ModelJudge", "unknown"),
         include_adversarial=False,
     )
+    # Patched after the run, not before: the sink fills as the requests happen,
+    # and passing `_served(...)` as an argument would read an empty set.
+    incumbent = incumbent.model_copy(update={"model_serve": _served(incumbent_seen)})
     print(scorecard_mod.render(incumbent))
     print()
 
     candidate = run(
         dataset,
-        shadow_mod.candidate_caller(
-            call,
-            feature_id=SHADOW_CANDIDATE_FEATURE if vary_model else None,
-            system=candidate_system,
+        shadow_mod.observing_caller(
+            shadow_mod.candidate_caller(
+                call,
+                feature_id=SHADOW_CANDIDATE_FEATURE if vary_model else None,
+                system=candidate_system,
+            ),
+            candidate_seen,
         ),
         run_id=f"shadow-candidate-{stamp}-{uuid.uuid4().hex[:6]}",
         created_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        model_serve=candidate_model,
+        model_serve="unobserved",
         model_judge=outputs.get("ModelJudge", "unknown"),
         include_adversarial=False,
     )
+    candidate = candidate.model_copy(update={"model_serve": _served(candidate_seen)})
     print(scorecard_mod.render(candidate))
     print()
 
-    result = shadow_mod.compare(incumbent, candidate, prompt_changed=candidate_system is not None)
+    result = shadow_mod.compare(
+        incumbent,
+        candidate,
+        prompt_changed=candidate_system is not None,
+        expect_model_change=vary_model,
+    )
     print(shadow_mod.render(result))
 
     # No baseline is written and no scorecard line is emitted. A shadow run is a

@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from agentpave_evalsvc.judge import JUDGE_FEATURE
 from agentpave_evalsvc.models import CaseResult, Scorecard
-from agentpave_evalsvc.shadow import candidate_caller, compare, render
+from agentpave_evalsvc.shadow import candidate_caller, compare, observing_caller, render
 from agentpave_gateway.routing import SHADOW_CANDIDATE_FEATURE
 
 HAIKU = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
@@ -275,6 +275,128 @@ def test_an_incomparable_pair_disowns_its_own_numbers() -> None:
 
     assert "not comparable" in rendered
     assert "✅" not in rendered
+
+
+# ── the failure the first deployed run actually hit ────────────────────────
+
+
+def test_two_arms_on_one_model_is_not_comparable() -> None:
+    """The first deployed shadow run's exact shape.
+
+    Both arms served by Haiku, every case tied, and the report said "no case
+    regressed — safe to adopt". Not merely wrong: *reassuring*, which is what a
+    comparison of a run against itself always produces.
+    """
+    incumbent = _card("run-a", [_case("a"), _case("b")], model_serve=HAIKU)
+    candidate = _card("run-b", [_case("a"), _case("b")], model_serve=HAIKU)
+
+    report = compare(incumbent, candidate, expect_model_change=True)
+
+    assert report.served_identically is True
+    assert report.comparable is False
+    assert report.shippable is False, "a run compared against itself reported adoptable"
+
+
+def test_identical_models_are_expected_when_only_the_prompt_varies() -> None:
+    # A prompt-only candidate serves on the incumbent's model by design, so the
+    # same check must not fire and condemn a legitimate run.
+    incumbent = _card("run-a", [_case("a")], model_serve=HAIKU)
+    candidate = _card("run-b", [_case("a")], model_serve=HAIKU)
+
+    report = compare(incumbent, candidate, prompt_changed=True, expect_model_change=False)
+
+    assert report.served_identically is False
+    assert report.comparable is True
+
+
+def test_the_same_model_report_names_the_cause_and_the_fix() -> None:
+    """The reader is a person who just spent a dollar and got a green tick.
+
+    Naming the model is not enough — the cause is that the routing table is
+    deployed code, which is not something the output would otherwise suggest.
+    """
+    incumbent = _card("run-a", [_case("a")], model_serve=HAIKU)
+    candidate = _card("run-b", [_case("a")], model_serve=HAIKU)
+
+    rendered = render(compare(incumbent, candidate, expect_model_change=True))
+
+    assert "compared the incumbent to itself" in rendered
+    assert "deploy-dev" in rendered
+    assert "✅" not in rendered
+
+
+def test_a_genuine_model_change_passes_the_check() -> None:
+    incumbent = _card("run-a", [_case("a")], model_serve=HAIKU)
+    candidate = _card("run-b", [_case("a")], model_serve=SONNET)
+
+    report = compare(incumbent, candidate, expect_model_change=True)
+
+    assert report.served_identically is False
+    assert report.shippable is True
+
+
+# ── observing which model actually served ─────────────────────────────────
+
+
+def test_the_served_model_is_recorded_from_the_response() -> None:
+    """Configuration is not evidence.
+
+    The header used to print a model name derived from a stack output and a
+    boolean — what *should* have happened. This reads what did.
+    """
+    seen: set[str] = set()
+
+    def call(**kwargs: Any) -> tuple[int, dict[str, Any]]:
+        return 200, {"completion": "ok", "model_id": HAIKU}
+
+    observing_caller(call, seen)(feature_id="airing", prompt="q")
+
+    assert seen == {HAIKU}
+
+
+def test_the_judges_model_is_not_recorded_as_a_serving_model() -> None:
+    # Folding the judge in would make both arms look like they served on two
+    # models each, and the same-model check would never fire.
+    seen: set[str] = set()
+    wrapped = observing_caller(lambda **kw: (200, {"model_id": SONNET}), seen)
+
+    wrapped(feature_id=JUDGE_FEATURE, prompt="grade")
+
+    assert seen == set()
+
+
+def test_a_refusal_contributes_no_served_model() -> None:
+    seen: set[str] = set()
+    wrapped = observing_caller(lambda **kw: (403, {"refused": True}), seen)
+
+    wrapped(feature_id="airing", prompt="q")
+
+    assert seen == set()
+
+
+def test_the_observer_returns_the_response_untouched() -> None:
+    seen: set[str] = set()
+    wrapped = observing_caller(lambda **kw: (200, {"completion": "hello", "model_id": HAIKU}), seen)
+
+    status, body = wrapped(feature_id="airing", prompt="q")
+
+    assert status == 200
+    assert body["completion"] == "hello"
+
+
+def test_observation_composes_with_the_candidate_wrapper() -> None:
+    """The candidate arm wraps both, and the outer observer must still see the
+    original feature id so it can tell a judge call from a serving call."""
+    seen: set[str] = set()
+    recorder = _Recorder()
+    wrapped = observing_caller(candidate_caller(recorder), seen)
+
+    wrapped(feature_id="airing", prompt="q")
+    wrapped(feature_id=JUDGE_FEATURE, prompt="grade")
+
+    assert recorder.calls[0]["feature_id"] == SHADOW_CANDIDATE_FEATURE
+    assert recorder.calls[1]["feature_id"] == JUDGE_FEATURE
+    assert seen == {"whatever"}, "only the serving call contributed a model"
 
 
 def test_a_prompt_change_is_declared_in_the_report() -> None:

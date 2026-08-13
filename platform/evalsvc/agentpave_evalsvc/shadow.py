@@ -92,6 +92,16 @@ class ShadowReport(_Strict):
     # Set when the two arms were graded by different judges, which invalidates
     # the comparison rather than colouring it.
     judge_changed: bool = False
+    # Set when a model change was intended and both arms were served by the same
+    # model anyway. The likeliest cause is a gateway deployed before the
+    # candidate feature existed: routing defaults open on an unknown feature, so
+    # the candidate silently gets the incumbent's model and every case ties.
+    #
+    # This is the failure the first deployed run actually hit, and it is the
+    # worst-shaped one available — the report was not merely wrong, it was
+    # *reassuring*. "No case regressed, safe to adopt" is exactly what a
+    # comparison of a run against itself produces.
+    served_identically: bool = False
 
     @property
     def regressions(self) -> tuple[str, ...]:
@@ -110,7 +120,12 @@ class ShadowReport(_Strict):
         broken run to re-run, while a comparable pair with regressions is a
         real answer that happens to be "no".
         """
-        return not (self.judge_changed or self.only_incumbent or self.only_candidate)
+        return not (
+            self.judge_changed
+            or self.only_incumbent
+            or self.only_candidate
+            or self.served_identically
+        )
 
     @property
     def shippable(self) -> bool:
@@ -180,8 +195,60 @@ def candidate_caller(
     return wrapped
 
 
+def observing_caller(call: Caller, sink: set[str]) -> Caller:
+    """Wrap a `Caller` and record which model actually served each request.
+
+    The gateway returns `model_id` on every completion and the harness throws
+    it away — `_extract` needs an answer and a cost, not a provenance. So the
+    only place the truth is visible is here, at the seam that already holds the
+    response body.
+
+    This exists because the first deployed shadow run reported "no case changed
+    outcome" and "safe to adopt" while both arms ran on the same model. The
+    report named two different models in its header, and that header was built
+    from stack outputs and a boolean — configuration describing what *should*
+    have happened, printed as though it were a measurement. The routing table
+    is deployed code, and a gateway that predates a new feature id routes it to
+    the fast model by design (routing rule 2 defaults open). Nothing in the
+    output could distinguish that from a genuine tie.
+
+    Judge calls are excluded for the same reason `candidate_caller` leaves them
+    alone: the judge is fixed by construction, and folding its model into this
+    set would make both arms look like they served on two models each.
+    """
+
+    def wrapped(
+        *,
+        feature_id: str,
+        prompt: str,
+        system: str | None = None,
+        classification: str = "internal",
+        max_tokens: int = 512,
+        temperature: float | None = None,
+    ) -> tuple[int, dict[str, Any]]:
+        status, body = call(
+            feature_id=feature_id,
+            prompt=prompt,
+            system=system,
+            classification=classification,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        if feature_id != JUDGE_FEATURE and status == 200:
+            served = body.get("model_id")
+            if served:
+                sink.add(str(served))
+        return status, body
+
+    return wrapped
+
+
 def compare(
-    incumbent: Scorecard, candidate: Scorecard, *, prompt_changed: bool = False
+    incumbent: Scorecard,
+    candidate: Scorecard,
+    *,
+    prompt_changed: bool = False,
+    expect_model_change: bool = False,
 ) -> ShadowReport:
     """Compare two runs of the same dataset."""
     incumbent_cases = {c.case_id: c for c in incumbent.cases}
@@ -215,6 +282,7 @@ def compare(
         only_incumbent=tuple(sorted(set(incumbent_cases) - set(candidate_cases))),
         only_candidate=tuple(sorted(set(candidate_cases) - set(incumbent_cases))),
         judge_changed=incumbent.model_judge != candidate.model_judge,
+        served_identically=(expect_model_change and incumbent.model_serve == candidate.model_serve),
     )
 
 
@@ -250,6 +318,16 @@ def render(report: ShadowReport) -> str:
         # numbers above, and a reader who skips to the verdict must not carry
         # those numbers away as a finding.
         lines.append("✋ these two runs are not comparable, so the deltas above mean nothing")
+        if report.served_identically:
+            lines.append(
+                f"   both arms were served by {report.incumbent_model_serve} — this run "
+                "compared the incumbent to itself"
+            )
+            lines.append(
+                "   the routing table is deployed code: a gateway that predates "
+                "the candidate feature routes it to the fast model by default. "
+                "Run 'make deploy-dev' and try again"
+            )
         if report.judge_changed:
             lines.append("   the judge differed between the arms — they were graded by two rubrics")
         for case_id in report.only_incumbent:
