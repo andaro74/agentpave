@@ -23,11 +23,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from agentpave_gateway.routing import SHADOW_CANDIDATE_FEATURE
+
 from . import adversarial as adversarial_mod
 from . import baseline as baseline_mod
 from . import calibration as calibration_mod
 from . import pr_comment as pr_comment_mod
 from . import scorecard as scorecard_mod
+from . import shadow as shadow_mod
 from . import telemetry as telemetry_mod
 from .harness import EVAL_TEMPERATURE, SERVICE_ID, Caller, capped_source, run
 from .judge import JUDGE_FEATURE, JUDGE_SYSTEM, build_judge_content, parse_verdict
@@ -135,6 +138,92 @@ def _live_scorer(call: Caller, dataset: Dataset):
         return parse_verdict(body["completion"])
 
     return score
+
+
+def run_shadow(
+    dataset: Dataset,
+    *,
+    stack_name: str,
+    vary_model: bool = True,
+    candidate_system: str | None = None,
+) -> int:
+    """`pave shadow-eval`: the golden set twice, incumbent then candidate.
+
+    Two arms, one process, one dataset, one judge. Running them minutes apart
+    against the same deployment is what makes the comparison mean anything —
+    the alternative is comparing today's candidate to a bar recorded on
+    Tuesday, which is `pave eval --diff` and answers a different question.
+
+    Adversarial probes are deliberately not run. They grade the platform's
+    controls, which are identical on both arms by construction, so running them
+    twice would double the bill to compare a thing that cannot differ.
+    """
+    outputs = _stack_outputs(stack_name)
+    url = outputs.get("FunctionUrl")
+    if not url:
+        print("✋ no deployed gateway URL — run 'make deploy-dev' first")
+        return 1
+
+    call = _signed_caller(url)
+    incumbent_model = outputs.get("ModelServe", "unknown")
+    # The capable model serves the judge and the shadow candidate alike, so the
+    # gateway's `ModelJudge` output names it. Read through the routing table
+    # rather than guessed: the candidate is a *feature*, and this output is
+    # what that feature resolves to (ADR-036).
+    candidate_model = outputs.get("ModelJudge", "unknown") if vary_model else incumbent_model
+
+    print("shadow eval runs the golden set twice — roughly double an eval run's cost.\n")
+
+    # Calibration once, before either arm. A judge that failed to agree with a
+    # person grades both arms into noise, and two noisy runs still produce a
+    # tidy-looking delta (fail closed).
+    report = calibration_mod.calibrate(dataset.calibration, _live_scorer(call, dataset))
+    print(calibration_mod.render(report))
+    if not calibration_mod.meets_floor(report):
+        print("\n✋ judge failed calibration — refusing to compare anything it graded")
+        return 1
+    print()
+
+    created_at = datetime.now(UTC).isoformat(timespec="seconds")
+    stamp = int(time.time())
+
+    incumbent = run(
+        dataset,
+        call,
+        run_id=f"shadow-incumbent-{stamp}-{uuid.uuid4().hex[:6]}",
+        created_at=created_at,
+        model_serve=incumbent_model,
+        model_judge=outputs.get("ModelJudge", "unknown"),
+        include_adversarial=False,
+    )
+    print(scorecard_mod.render(incumbent))
+    print()
+
+    candidate = run(
+        dataset,
+        shadow_mod.candidate_caller(
+            call,
+            feature_id=SHADOW_CANDIDATE_FEATURE if vary_model else None,
+            system=candidate_system,
+        ),
+        run_id=f"shadow-candidate-{stamp}-{uuid.uuid4().hex[:6]}",
+        created_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        model_serve=candidate_model,
+        model_judge=outputs.get("ModelJudge", "unknown"),
+        include_adversarial=False,
+    )
+    print(scorecard_mod.render(candidate))
+    print()
+
+    result = shadow_mod.compare(incumbent, candidate, prompt_changed=candidate_system is not None)
+    print(shadow_mod.render(result))
+
+    # No baseline is written and no scorecard line is emitted. A shadow run is a
+    # question, not a measurement of the platform: its candidate arm was served
+    # by a model the platform does not serve on, and charting that in the eval
+    # trend would put a number on the graph that no deployed configuration
+    # produced (ADR-030's rule, applied to a run that does not belong there).
+    return 0 if result.shippable else 1
 
 
 def run_deployed(
