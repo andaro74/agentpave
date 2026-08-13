@@ -559,3 +559,147 @@ written down, since each one enlarges the unchecked surface.
 ## Ad-hoc reviews
 
 *(none yet)*
+
+---
+
+## M07 — the handoff
+
+Written the same way M05's and M06's were: what is true, what is not, and what a
+new session cannot infer from the code. **M06 is closed** — tag `M06` on
+`62ebb8f`, both gates green, ADRs 035–037, deployed gate witnessed by a human.
+
+### Where the platform stands
+
+Six stacks deployed in `us-west-2`, nothing billing while idle: `Gateway`, `Mcp`,
+`Eval`, `Dashboard`, `Ci`, `Service-CatalogAgent`. `main` requires one status
+check, `gate verdict`. `make check` is **725 tests**. Thirty-seven ADRs. The
+tool registry now declares four parameters on three tools; `get_schedule` gained
+an optional `limit` in M06 and is the platform's first union-typed parameter.
+
+The eval trend grew by two graded runs on 2026-08-13 — `ce4b9ae` on `main` and
+PR #2's post-repair run — both 31/31. **The baseline did not move**: CI runs
+`pave eval --diff --pr-comment` with no `--save-baseline`, so it remains
+`eval-1786542623-d4423c`. Only a local `make eval` moves it.
+
+### Five facts that will bite
+
+1. **`993faa6` has a cancelled gate run, not a green one.** Pushing the docs
+   commit superseded the merge commit's in-flight run — the concurrency group
+   doing exactly what it documents, and saving $0.47. The merge is
+   content-identical to `d6eadd4`, which passed the full ladder. But
+   `gate verdict` fails closed on `cancelled`, so `main`'s history shows a red
+   check on a commit that is fine. Re-run it if the artifact needs to look clean.
+2. **`make eval` carries `--save-baseline`; CI does not.** Any passing *local*
+   run moves the bar. Use `pave eval --diff` alone to measure without recording.
+3. **Renaming the `verdict` job silently un-protects `main`.** The required check
+   is the string `gate verdict`, stored in a GitHub rule outside this repository.
+   A test pins the name here; nothing can pin the GitHub side (ADR-034).
+4. **PR [#1](https://github.com/andaro74/agentpave/pull/1) must stay open and
+   red.** It is Act 2's artifact. PR #2 is merged and is Act 3's.
+5. **`pave shadow-eval` writes nothing anywhere, by design.** No baseline, no
+   scorecard line (ADR-030's rule applied to a run served by a model the
+   platform does not serve on). Both M06 shadow runs' absolute costs exist only
+   in a terminal that is now closed. They are recoverable from the gateway's
+   metering rows in DynamoDB by `service_id: evalsvc`, and the run ids are
+   `shadow-incumbent-1786592711-ba0bef` / `-candidate-…-d2dc32` (the void first
+   run) and `shadow-incumbent-1786594307-7900a1` / `-candidate-…-767547` (the
+   real one). M07's honest-cost section needs those numbers.
+
+### What M07 asks for
+
+README with the epigraph, problem, three acts as GIFs, architecture, honest cost,
+and known limits — the agentic-pii-erasure skeleton. `docs/diagrams/` via
+`make diagrams`. This file finalised. 10–15 ADRs (there are 37). A Lessons &
+Failures section with at least three real failures. Project page.
+
+- **Hermetic gate:** `make check` green from a clean clone; README quick-start
+  verified against a fresh checkout; no broken doc links.
+- **Deployed gate:** full `make walkthrough` from `make deploy-dev` on a clean
+  stack; `make destroy-dev` leaves nothing billing.
+
+### Four things M07 is obliged to say, not free to choose
+
+These are not suggestions. Each is a claim the repository currently makes that is
+wider than what it can defend.
+
+1. **The registry's contract claim is overstated.** ARCHITECTURE §2 and
+   `tools.yaml`'s own header say drift in either direction fails the hermetic
+   gate. For union-typed parameters it does not — see ADR-037. The README may
+   not repeat the claim without the exemption, and `get_schedule`'s `limit` is
+   the live example: declared correctly by authorship, not by enforcement.
+2. **Act 3 is human-triggered.** ROADMAP's wording implies CI runs Claude Code;
+   ADR-035 is why it does not. The GIF's caption must say a human ran the agent
+   against `pave selfheal`'s verdict.
+3. **The golden set has neither headroom nor, for an expensive candidate, much
+   comparison surface.** The incumbent is 31/31, so a shadow run can only report
+   "no change" or "regression". Eight cases compare Sonnet to itself; six more
+   fail per-case cost budgets before their answers are read. Seventeen of 31
+   genuinely evaluate a Sonnet candidate. This is ARCHITECTURE §7 Q3's answer,
+   and it is not the answer the question anticipates — the binding constraints
+   are saturation and incumbent-priced budgets, not dataset size.
+4. **Shadow-eval's cost is arithmetic, not measurement.** "Roughly double an eval
+   run" was never checked against the two runs that happened. See fact 5 above.
+
+### The Lessons & Failures section is already stocked
+
+ROADMAP asks for at least three real failures. M06 alone supplies three, and they
+are one family — **an assertion that read configuration on both sides and was
+therefore incapable of disagreeing with itself**:
+
+- **The shadow header built from a stack output and a boolean.** Reported "safe
+  to adopt" having compared the incumbent to itself. The tell was a *negative*
+  cost delta where Sonnet should have cost more. Fixed by observing `model_id`
+  from response bodies.
+- **The cost delta confounded by skipped judge calls.** A failing case is never
+  judged, so a worse arm is a cheaper arm; "quality down, cost down" was one fact
+  counted twice. Fixed by counting judge verdicts per arm.
+- **`_types_of` comparing `None` to `None`.** An assertion that had been empty
+  for a whole class of parameter, found only by making a change of a shape the
+  platform had never made.
+
+The same family reaches back further — M02's transport failures folded into
+passing results, M04's `traced` act vouching for Lambda's own segments, ADR-015's
+probe that could never pass, M05's spend panel, ADR-034's always-green skip that
+was refused. **That is the essay: this repository's recurring defect is not
+broken code, it is checks that cannot fail.** Six instances across six
+milestones, each found by a different accident, none found by review.
+
+There is a seventh worth including because it is the only one where the guard
+worked: **emptying `NOT_YET` turned two parametrised loops into zero collected
+tests reporting green** — the not-yet rule's own coverage would have vanished
+silently on the day it finally had nothing to guard. Caught before commit.
+
+### Still open, and each must be resolved or restated at M07
+
+All five threads from M05's handoff survive untouched — the judge's **near-miss
+blind spot** (not fixable by prompt wording; needs claim extraction or a
+groundedness-only second judge), the **`airing-schedule-abc-overnight` tone
+flake** (a plausible fix, not a proven one; if it reddens a gate the next move is
+deciding whether a stylistic axis should block a PR at all), **ADR-028's path
+filter leaking on `templates/`**, **ADR-026's untested tool authorization**, and
+**ADR-034's un-assertable half**. M06 adds two: **ADR-035's classifier has no
+automated consumer**, so nothing exercises its rules but its own tests — which
+contract tests genuinely drift is a hypothesis only real failures would correct —
+and **ADR-037's union-type gap**, whose repair must ship a test that fails
+against *today's* helper, because a fix verified by the suite continuing to pass
+has demonstrated nothing.
+
+### Environment traps, all paid for once already
+
+- **Git Bash rewrites arguments starting with `/`** into Windows paths, and
+  mangles `ref:path` colons. `MSYS_NO_PATHCONV=1` fixes both.
+- **PowerShell here-strings (`@'…'@`) are not bash.** Used in the Bash tool they
+  produce a commit whose subject line is `@`. Use `git commit -F -` with a
+  heredoc.
+- **Windows filesystems are case-insensitive**, so `git tag -a M05` collided with
+  an existing lowercase `m05` and reported "already exists" while `git tag -l`
+  showed only the lowercase name.
+- **To revert a staged experiment, use `git checkout -- <file>`**, never a
+  copy-to-scratchpad-and-restore dance. The latter failed once with "cannot
+  stat" and left the tree in a state that had to be reasoned about.
+- `gh pr update-branch` does not exist in the installed `gh`; use
+  `gh api -X PUT repos/<owner>/<repo>/pulls/<n>/update-branch`.
+- `gh pr view --comments` fails on a Projects-classic deprecation; read comments
+  with `gh api repos/<owner>/<repo>/issues/<n>/comments`.
+- **`pave selfheal --changed` repeats, it does not take a list.** One flag per
+  path.
