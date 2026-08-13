@@ -31,7 +31,20 @@ from .models import DataClassification, RoutingDecision
 # produced it, and the suite would have gone green while measuring nothing.
 # Nothing about that failure is visible in a scorecard, which is why it is a
 # routing entry with a test rather than a convention.
-CAPABLE_FEATURES = frozenset({"enrichment", "judge"})
+# `pave shadow-eval` compares a candidate against the incumbent on the golden
+# set. The candidate's *model* is named here rather than by the caller, and
+# that placement is the whole point: `GatewayRequest` has no model field, so a
+# service cannot ask for a model — it names a feature and the platform decides
+# (ARCHITECTURE.md invariant 1). A shadow run that let its caller pass a model
+# id would have routed around the table that exists to stop exactly that, and
+# would have made "try the candidate model" indistinguishable from "try any
+# model, unpriced and unguarded" (ADR-036).
+#
+# So the candidate is a feature like any other, and asking "what if serving ran
+# on the capable model?" is answered by adding one entry to this set.
+SHADOW_CANDIDATE_FEATURE = "shadow-candidate"
+
+CAPABLE_FEATURES = frozenset({"enrichment", "judge", SHADOW_CANDIDATE_FEATURE})
 
 _SENSITIVE_REFUSAL = (
     "data classification 'sensitive' is refused by design: this platform has no "
