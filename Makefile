@@ -235,3 +235,20 @@ seed-baseline: ## M05 deployed: write the current eval scores as the CI gate bas
 	@# measurement to tidy a chart is the instinct this platform exists to
 	@# resist — but a failing run can no longer become the bar.
 	@$(WITH_ENV) uv run pave eval --save-baseline
+
+.PHONY: shadow-eval
+shadow-eval: ## M06 deployed gate: candidate vs. incumbent on the golden set (the canary stand-in)
+	@# A thin wrapper for the same reason `eval` is one — `pave shadow-eval` is
+	@# the single implementation.
+	@#
+	@# This costs roughly double an eval run: the golden set is served twice,
+	@# once as the platform serves today and once as the candidate would. Both
+	@# arms are graded by the same judge, which is enforced in code rather than
+	@# arranged by convention — a shadow run whose judge moved would print
+	@# deltas that measure the grader (ADR-036).
+	@#
+	@# Nothing is recorded. A shadow run is a question, not a measurement of
+	@# the platform: its candidate arm was served by a model no deployed
+	@# configuration serves on, so it writes no baseline and emits no scorecard
+	@# line for the dashboard's trend to chart.
+	@$(WITH_ENV) uv run pave shadow-eval

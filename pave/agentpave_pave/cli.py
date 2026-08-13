@@ -25,13 +25,18 @@ from agentpave_evalsvc.dataset import DatasetError, load_dataset
 from agentpave_evalsvc.harness import plan
 
 from . import gate as gate_mod
+from . import selfheal
 from .scaffold import CLASSIFICATIONS, ScaffoldError, render, validate
 
 # Which milestone owns each verb, for the not-yet message. Kept as data so the
 # message and the roadmap cannot disagree quietly.
-NOT_YET = {
-    "shadow-eval": "M06",
-}
+#
+# Empty since M06: `shadow-eval` was the last one, and it graduated. The
+# mechanism stays rather than being deleted with its final entry — CLAUDE.md
+# requires the next unimplemented verb to fail loudly, and a rule whose
+# machinery was removed the moment it had nothing to do is a rule that gets
+# rediscovered the hard way.
+NOT_YET: dict[str, str] = {}
 
 # The templates ship inside the repo, not inside the installed package: the
 # scaffolder is run from a clone, and a template the operator cannot read and
@@ -157,9 +162,45 @@ def _build_parser() -> argparse.ArgumentParser:
         help="output directory (default: services/); used by the render gate",
     )
 
-    sub.add_parser(
+    shadow = sub.add_parser(
         "shadow-eval",
-        help=f"candidate vs. incumbent on the golden set (arrives in {NOT_YET['shadow-eval']})",
+        help="candidate vs. incumbent on the golden set — the canary stand-in",
+    )
+    shadow.add_argument(
+        "--prompt",
+        default=None,
+        metavar="PATH",
+        help=(
+            "a file holding the candidate's serving system prompt. Read from a "
+            "file rather than an argument because a serving prompt is hundreds "
+            "of characters of prose that belongs under review in a diff"
+        ),
+    )
+    shadow.add_argument(
+        "--prompt-only",
+        action="store_true",
+        help=(
+            "vary the prompt without varying the model — both arms serve on the "
+            "incumbent model. Requires --prompt"
+        ),
+    )
+
+    heal = sub.add_parser(
+        "selfheal",
+        help="classify a red contract suite: schema drift, or a real defect",
+    )
+    heal.add_argument(
+        "--report",
+        required=True,
+        metavar="PATH",
+        help="a JUnit XML report from the failing run (pytest --junitxml)",
+    )
+    heal.add_argument(
+        "--changed",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="a path the change touched; repeat for each (git diff --name-only)",
     )
 
     return parser
@@ -188,6 +229,65 @@ def _run_eval(args: argparse.Namespace) -> int:
         adversarial_only=args.adversarial_only,
         pr_comment_path=args.pr_comment,
     )
+
+
+def _run_shadow_eval(args: argparse.Namespace) -> int:
+    if args.prompt_only and not args.prompt:
+        # Neither axis would vary, so both arms would be the same run and the
+        # report would print a confident "no case changed outcome" about a
+        # comparison that never happened.
+        print(
+            "pave shadow-eval: --prompt-only needs --prompt, or nothing varies "
+            "between the two arms",
+            file=sys.stderr,
+        )
+        return 1
+
+    candidate_system = None
+    if args.prompt:
+        try:
+            candidate_system = Path(args.prompt).read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            print(f"pave shadow-eval: cannot read {args.prompt}: {exc}", file=sys.stderr)
+            return 1
+        if not candidate_system:
+            print(f"pave shadow-eval: {args.prompt} is empty", file=sys.stderr)
+            return 1
+
+    try:
+        dataset = load_dataset(None)
+    except DatasetError as exc:
+        print(f"dataset is not usable: {exc}", file=sys.stderr)
+        return 1
+
+    from agentpave_evalsvc.runner import run_shadow
+
+    return run_shadow(
+        dataset,
+        stack_name=os.environ.get("AGENTPAVE_GATEWAY_STACK", "AgentPave-Gateway-dev"),
+        vary_model=not args.prompt_only,
+        candidate_system=candidate_system,
+    )
+
+
+def _run_selfheal(args: argparse.Namespace) -> int:
+    """Classify a red contract suite.
+
+    Exit 0 means "an AI may be asked to propose a repair"; every other outcome,
+    including a usage error, exits non-zero. The coupling is deliberate: a
+    caller that treated a crash as permission would be the failure this
+    classifier exists to prevent, so the only way to reach 0 is a positive
+    verdict of drift.
+    """
+    try:
+        failures = selfheal.failures_from_junit(Path(args.report))
+    except selfheal.ReportError as exc:
+        print(f"pave selfheal: {exc}", file=sys.stderr)
+        return 1
+
+    result = selfheal.classify(failures, args.changed)
+    print(selfheal.render(result))
+    return 0 if result.proposable else 1
 
 
 def _run_gate(args: argparse.Namespace) -> int:
@@ -260,6 +360,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _run_new(args)
     if args.verb == "gate":
         return _run_gate(args)
+    if args.verb == "shadow-eval":
+        return _run_shadow_eval(args)
+    if args.verb == "selfheal":
+        return _run_selfheal(args)
 
     # Unreachable while argparse validates the verb, but an unhandled verb
     # must not exit 0 — a CLI that silently succeeds at nothing is the failure

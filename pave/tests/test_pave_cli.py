@@ -40,24 +40,34 @@ def test_pave_new_refuses_a_bad_name_without_writing(tmp_path, capsys):
     assert not list(tmp_path.iterdir()), "a rejected name left files behind"
 
 
-def test_pave_shadow_eval_fails_loudly(capsys):
-    code = main(["shadow-eval"])
-    assert code == 1
-    assert "arrives in M06" in capsys.readouterr().err
+def test_no_verb_is_still_pending():
+    """`shadow-eval` graduated in M06 and was the last one.
+
+    Asserted explicitly rather than left to a parametrised loop over `NOT_YET`.
+    A `@parametrize` over an empty mapping collects zero tests and reports
+    green — the not-yet rule's own coverage would have disappeared silently on
+    the day it finally had nothing to guard.
+    """
+    assert NOT_YET == {}
 
 
-@pytest.mark.parametrize("verb", sorted(NOT_YET))
-def test_every_not_yet_verb_exits_non_zero(verb):
-    """Whatever else changes, none of these may exit 0."""
-    argv = [verb, "a-name"] if verb == "new" else [verb]
-    assert main(argv) != 0
+def test_the_not_yet_mechanism_still_works_for_the_next_verb(capsys):
+    """The machinery outlives its last entry.
 
+    CLAUDE.md requires the next unimplemented verb to fail loudly, so the path
+    is exercised directly here instead of being deleted along with the final
+    entry and rediscovered the hard way in M07.
+    """
+    from agentpave_pave.cli import _not_yet
 
-@pytest.mark.parametrize("verb", sorted(NOT_YET))
-def test_every_not_yet_verb_points_at_the_roadmap(verb, capsys):
-    argv = [verb, "a-name"] if verb == "new" else [verb]
-    main(argv)
-    assert "docs/ROADMAP.md" in capsys.readouterr().err
+    NOT_YET["teleport"] = "M99"
+    try:
+        assert _not_yet("teleport") == 1
+        err = capsys.readouterr().err
+        assert "arrives in M99" in err
+        assert "docs/ROADMAP.md" in err
+    finally:
+        del NOT_YET["teleport"]
 
 
 def test_output_survives_a_cp1252_console():
@@ -124,18 +134,86 @@ def test_a_flag_given_by_prefix_is_rejected(flag):
     assert exc.value.code != 0
 
 
-def test_not_yet_milestones_match_the_roadmap():
-    """The message and the roadmap must not drift apart.
+def test_every_verb_the_roadmap_names_is_implemented():
+    """The reverse of the old drift test, and the reason it existed.
 
-    `pave shadow-eval` is M06's canary stand-in. `pave new` graduated in M04
-    and must no longer be advertised as pending — a CLI that says a verb is
-    missing while implementing it is the not-yet rule failing in reverse.
+    A CLI that advertises a verb as pending while implementing it is the
+    not-yet rule failing backwards, so the check now runs the other way: every
+    verb the roadmap names must parse and none may be in `NOT_YET`.
     """
     from pathlib import Path
 
     roadmap = (Path(__file__).resolve().parents[2] / "docs" / "ROADMAP.md").read_text(
         encoding="utf-8"
     )
-    assert "## M06" in roadmap
     assert "pave shadow-eval" in roadmap
-    assert NOT_YET == {"shadow-eval": "M06"}
+    assert "shadow-eval" not in NOT_YET
+
+
+# ── shadow-eval's guards (hermetic: these return before touching AWS) ──────
+
+
+def test_shadow_eval_refuses_prompt_only_with_no_prompt(capsys):
+    """Both arms would be the same run.
+
+    The report would then print a confident "no case changed outcome" about a
+    comparison that never happened — a reassuring sentence produced by a
+    misuse, which is worse than an error.
+    """
+    assert main(["shadow-eval", "--prompt-only"]) == 1
+    assert "nothing varies" in capsys.readouterr().err
+
+
+def test_shadow_eval_refuses_an_unreadable_prompt(capsys, tmp_path):
+    assert main(["shadow-eval", "--prompt", str(tmp_path / "absent.txt")]) == 1
+    assert "cannot read" in capsys.readouterr().err
+
+
+def test_shadow_eval_refuses_an_empty_prompt(capsys, tmp_path):
+    # An empty file would substitute an empty system prompt and quietly grade a
+    # candidate nobody meant to test.
+    empty = tmp_path / "prompt.txt"
+    empty.write_text("   \n", encoding="utf-8")
+
+    assert main(["shadow-eval", "--prompt", str(empty)]) == 1
+    assert "is empty" in capsys.readouterr().err
+
+
+# ── selfheal ──────────────────────────────────────────────────────────────
+
+
+def _junit(tmp_path, *failures: str):
+    cases = "".join(f'<testcase name="{n}"><failure message="x"/></testcase>' for n in failures)
+    path = tmp_path / "report.xml"
+    path.write_text(f"<testsuites><testsuite>{cases}</testsuite></testsuites>", encoding="utf-8")
+    return str(path)
+
+
+def test_selfheal_exits_zero_only_on_drift(tmp_path, capsys):
+    report = _junit(tmp_path, "test_advertised_input_properties_match_the_contract")
+
+    code = main(["selfheal", "--report", report, "--changed", "platform/registry/tools.yaml"])
+
+    assert code == 0
+    assert "schema_drift" in capsys.readouterr().out
+
+
+def test_selfheal_exits_non_zero_on_a_real_defect(tmp_path, capsys):
+    report = _junit(tmp_path, "test_response_validates_against_the_declared_output_schema")
+
+    code = main(["selfheal", "--report", report, "--changed", "platform/registry/tools.yaml"])
+
+    assert code == 1
+    assert "propose nothing" in capsys.readouterr().out
+
+
+def test_selfheal_exits_non_zero_when_it_cannot_read_the_report(tmp_path, capsys):
+    """A crash must never read as permission.
+
+    Exit 0 means "an AI may propose a repair". Every other outcome — including
+    a missing file — has to be non-zero, or a broken invocation becomes consent.
+    """
+    code = main(["selfheal", "--report", str(tmp_path / "absent.xml")])
+
+    assert code == 1
+    assert "no report" in capsys.readouterr().err
