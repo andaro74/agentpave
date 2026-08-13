@@ -230,8 +230,8 @@ human reading the output.** Not one was found by adding another test of the kind
 already there.
 
 That is the reusable result, and it is worth more than the list that produced it.
-This repository's gate is 736 hermetic tests, ruff and `cdk synth` over six
-stacks — and ten times across six milestones it was green while something
+This repository's gate is 738 hermetic tests, ruff and `cdk synth` over six
+stacks — and **eleven** times across six milestones it was green while something
 underneath it was measuring nothing at all.
 
 > **The recurring defect was never broken code. It was checks that could not
@@ -265,7 +265,7 @@ checked against the PII policy. A shadow run's model labels built from the confi
 that produced them. A type comparison returning `None` on both sides. A test like
 that is not weak; it is empty, and it reports the same green as a real one.
 
-Five worth reading in full. The complete log of ten, with the fix and the test
+Six worth reading in full. The complete log of eleven, with the fix and the test
 that kills each, is in [`docs/VALIDATION.md`](docs/VALIDATION.md).
 
 | The check | What it actually asserted | Found by |
@@ -275,10 +275,25 @@ that kills each, is in [`docs/VALIDATION.md`](docs/VALIDATION.md).
 | `pave shadow-eval`'s header | Built its two model names from a stack output and a boolean — describing the **configuration, not the run**. It reported "safe to adopt" having compared the incumbent to itself | A **negative** cost delta, where the more expensive model should have cost more |
 | The contract suite's `_types_of` | MCP renders `int \| None` as `anyOf` with no top-level `type`, so a union-typed parameter compares as `None` **on both sides**. `limit` would pass this gate declared as a string, a list, or an object ([ADR-037](docs/adr/ADR-037-contract-suite-does-not-check-union-types.md)) | Making a change of a shape the platform had never made |
 | The eval trend panel | `max(pass_rate)` by UTC day deletes precisely the regressions that were **repaired**, because fix-and-re-run lands the same day. The one regression this project ever recorded was not on its own chart ([ADR-038](docs/adr/ADR-038-trend-charts-the-days-worst-beside-its-best.md)) | Reading the panel while writing this section |
+| The architecture diagram above | Rendered with 66 `<foreignObject>` elements and zero `<text>`. GitHub's markdown sanitiser strips exactly those, so the diagram would have published as **correctly-shaped boxes containing no text at all** | Opening the SVG the way a reader would, after this section was written |
 
-The last one is not an oversight. The `max()` was argued for in its own
+The eval trend was not an oversight. The `max()` was argued for in its own
 docstring, correctly, against a different alternative — a considered, documented
 decision that was still blind to the case that mattered.
+
+And the last row is the one to end on. That diagram was verified twice before it
+shipped, both times against a **PNG export** — which renders the labels
+perfectly, as does every local SVG viewer, as does the headless browser that
+produced the file. The only surface where it fails is the only surface it exists
+for. It is the same shape as the `traced` act reading X-Ray summaries and the
+spend panel whose query was correct in every clause: **a check performed against
+a proxy for the thing rather than the thing.**
+
+It was found forty minutes after this section was written, on the artifact
+illustrating it, by the author of the sentence you are reading. That is the
+honest state of the art here — not that the pattern was solved, but that it is
+frequent enough to catch a person actively looking for it, which is the reason
+this section exists rather than a footnote admitting it.
 
 ### The one where the guard worked
 
