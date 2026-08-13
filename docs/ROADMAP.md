@@ -50,6 +50,11 @@ allowed tools. Same server registered in Claude Code's own config (dogfooding).
   error shapes, side-effect-free verification, wrong-identity **deny** asserted;
   a deliberately broken schema turns the suite red (committed as a test of the
   tests, then reverted).
+  **Narrowed at M07:** "schema conformance" holds except for the *types* of
+  union-typed parameters, which the suite compares as `None` to `None` and
+  therefore does not check at all (ADR-037). Found in M06 by `get_schedule`
+  gaining an optional `limit` — the first union-typed parameter the platform
+  had ever declared.
 - **Deployed gate:** `make conformance` — the same suite against the deployed
   Lambda target.
 

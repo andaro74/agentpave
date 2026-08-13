@@ -7,7 +7,17 @@
 # but GET turns the suite red. The class is a checked property, not a label.
 #
 # Schemas here are the contract. The MCP server must advertise exactly these —
-# drift in either direction fails the hermetic gate.
+# drift in either direction fails the hermetic gate, **except in the types of
+# union-typed parameters**, where it does not (ADR-037).
+#
+# `_types_of` compares `prop.get("type")`, and MCP renders `int | None` as
+# `anyOf` with no top-level `type`. So a union-typed parameter compares as
+# `None` on both sides and the assertion is vacuous: `get_schedule`'s `limit`
+# would pass this gate declared as a string, a list, or an object. It is
+# declared correctly today by authorship, not by enforcement.
+#
+# Until ADR-037 is closed, no further union-typed parameter may be added — the
+# exemption has to stay one named case rather than a growing set nobody counts.
 
 version: 1
 

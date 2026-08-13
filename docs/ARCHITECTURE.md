@@ -185,11 +185,28 @@ gate (`make check`, no AWS) and a deployed gate (human-run after
 
 ## 7. Open questions
 
-Kept honestly open rather than resolved by fiat; revisited at M07.
+Kept honestly open rather than resolved by fiat; **all three closed at M07**,
+two of them by evidence and one by fiat that says so.
 
-- **Q1:** Should the judge score the *trajectory* (tool choice, step count) in
+- ~~**Q1:** Should the judge score the *trajectory* (tool choice, step count) in
   this demo, or is answer-level scoring sufficient at one-tool scale? Trajectory
-  evals are the full-platform answer; at one tool the signal may be trivial.
+  evals are the full-platform answer; at one tool the signal may be trivial.~~
+  **Answered at M07: no, because the trajectory is a constant.** It is not
+  "trivial" in the sense of being short — `agent._grounding()` returns
+  `("search_show", …)` unconditionally, so every one of the 31 golden cases
+  takes exactly one step, to one tool, chosen by a Python function rather than
+  by the model. A trajectory judge would score the same trajectory 31 times and
+  agree with itself 31 times: an assertion incapable of disagreeing, which is
+  the defect this repository found six times in seven days (see the README's
+  Lessons section). Scoring it would add cost and a green number that means
+  nothing.
+  **What would make it the first thing worth scoring:** the moment `_grounding`
+  branches on a model decision. A wrong tool choice produces an answer that is
+  *genuinely grounded in the wrong source*, and answer-level groundedness passes
+  it — the judge checks the answer against the fixture it was given, not against
+  the fixture it should have asked for. That failure is invisible to every axis
+  scored today, and it arrives with the second tool the model may choose
+  between, not with the second tool in the registry.
 - ~~**Q2:** The defect-leakage counter needs a "prod-detected" increment path.
   Manual for the demo — what would the honest automated trigger be?~~
   **Answered in M05 (ADR-032), by fiat and against this section's own preamble:
@@ -198,5 +215,27 @@ Kept honestly open rather than resolved by fiat; revisited at M07.
   Deriving it from the gate's own failures is forbidden — a gate that fails is a
   defect *caught*, and charting that as leakage would make working controls look
   like escapes.
-- **Q3:** `pave shadow-eval` compares on the golden set only. At what dataset
-  size does that stop being a meaningful canary stand-in?
+- ~~**Q3:** `pave shadow-eval` compares on the golden set only. At what dataset
+  size does that stop being a meaningful canary stand-in?~~
+  **Answered at M07, and size is the wrong axis.** Two M06 shadow runs measured
+  it. The binding constraints are **saturation** and **incumbent-priced
+  budgets**, and neither improves by adding cases:
+  - The incumbent scores **31/31**, so a shadow run can report "no change" or
+    "regression" and nothing else. Improvement is arithmetically unreachable —
+    half of what a canary exists to tell you is unobservable, at any dataset
+    size, until the incumbent stops being perfect.
+  - **8 of 31 cases compare Sonnet to itself.** Enrichment is already routed to
+    the capable model, so both arms serve those cases identically.
+  - **6 more fail per-case cost budgets before their answers are read.** The
+    budgets were set when the cases ran on Haiku; Sonnet's input is 3× the
+    price, and every case on the two large fixtures blows its ceiling. A more
+    expensive candidate is therefore **unevaluable on quality at all** — it
+    fails on cost first, and the answer is never graded.
+  - **17 of 31 genuinely evaluate a Sonnet candidate**, all of which the
+    incumbent already passes.
+
+  A bigger golden set inherits all three properties. What would fix them is
+  headroom (cases the incumbent fails), budgets expressed per model rather than
+  per case, and a comparison surface that scores answers the deterministic
+  asserts have already rejected. See ADR-036 and the M06 rows of
+  `docs/VALIDATION.md` for the measurements.

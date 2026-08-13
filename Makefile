@@ -265,6 +265,18 @@ shadow-eval: ## M06 deployed gate: candidate vs. incumbent on the golden set (th
 	@# arranged by convention — a shadow run whose judge moved would print
 	@# deltas that measure the grader (ADR-036).
 	@#
+	@# "Roughly double" was arithmetic for a whole milestone and is now a
+	@# measurement. Recovered from the gateway's metering rows at M07, because
+	@# a shadow run records nothing itself: the two M06 runs cost $0.915088 and
+	@# $0.936370 against an eval run's $0.4723 — 1.94x and 1.98x. The estimate
+	@# was right; it had simply never been checked.
+	@#
+	@# The second run is the one worth reading. Serving the candidate on Sonnet
+	@# cost +$0.202709, and the judge bill *fell* $0.212103 because six cases
+	@# failed their cost budgets and were never judged. The candidate looked
+	@# $0.01 cheaper because it failed. `cost_delta_usd` is not independent of
+	@# the outcomes, which is why the report prints judge counts per arm.
+	@#
 	@# Nothing is recorded. A shadow run is a question, not a measurement of
 	@# the platform: its candidate arm was served by a model no deployed
 	@# configuration serves on, so it writes no baseline and emits no scorecard

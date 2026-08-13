@@ -241,6 +241,30 @@ def test_the_trend_panel_charts_the_pass_rate_over_time(template: Template) -> N
     assert "bin(" in trend
 
 
+def test_the_trend_panel_charts_the_worst_run_of_the_day_as_well_as_the_best(
+    template: Template,
+) -> None:
+    """ADR-038. `max` alone hides any regression that was repaired the same day.
+
+    This is not hypothetical and the assertion exists because it happened: the
+    29/31 run of 2026-08-13 rendered as a dip, three passing runs landed before
+    midnight UTC, and `max(pass_rate)` over `bin(1d)` returned the day to 100.
+    The failing scorecard line is still in the log group — ADR-030 requires it
+    to be written — so only the query lost it.
+
+    `min` is what makes a repaired regression permanent, which is the shape of a
+    gate that works rather than a suite that never regressed.
+    """
+    (trend,) = [q for q in _queries(template) if EVAL_EVENT in q]
+    assert "max(pass_rate)" in trend, "the day's best run is what says the suite still passes"
+    assert "min(pass_rate)" in trend, (
+        "the day's worst run is what makes a repaired regression visible at all"
+    )
+    # Aliasing an aggregate to the field it reads renders the column empty —
+    # the M05 spend-panel defect. Both series carry distinct names.
+    assert "best_pct" in trend and "worst_pct" in trend
+
+
 # ── the honesty of the hand-cranked panel ─────────────────────────────────
 
 

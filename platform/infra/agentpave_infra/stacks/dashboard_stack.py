@@ -131,22 +131,39 @@ class DashboardStack(Stack):
         )
 
     def _eval_trend(self) -> cloudwatch.LogQueryWidget:
-        """Pass rate per day, from the lines `pave eval` writes.
+        """Pass rate per day, from the lines `pave eval` writes — best and worst.
 
-        `max`, not `avg`. Several runs can land on one day — a pull request's
-        gate, a re-run after a fix, the nightly — and averaging them charts a
-        day's worst moment into the trend forever. The question this panel
-        answers is "does the suite still pass", and the best run of the day is
-        the honest answer to it; the failures are visible in the gate that
-        blocked and in the PR comment that explained why.
+        `avg` is rejected: several runs land on one day — a pull request's gate,
+        a re-run after the fix, the nightly — and averaging them charts a day's
+        worst moment into the trend forever.
+
+        `max` alone was the original answer, and it was wrong in a way only the
+        data showed. On 2026-08-13 the gate blocked a pull request at 29/31 and
+        the panel rendered 100 → 93.5, the first regression it had ever drawn.
+        Three passing runs later the same UTC day, the bucket became
+        `max(0.935, 1, 1, 1)` and the dip vanished. The fix-and-re-run cycle
+        guarantees that: `max` by day deletes precisely the regressions that
+        were *repaired*, and keeps only the ones nobody got to before midnight.
+
+        That inverts ADR-030's own rule — a line is written per graded run,
+        passing or failing, because "a trend that dropped its failures would
+        chart a platform that never regressed". The write side kept them; this
+        query threw them away.
+
+        So both, over the same bin (ADR-038): `best_pct` answers "does the suite
+        still pass", `worst_pct` makes a regression permanent on the day it
+        happened. The cost is that a flake now leaves an identical mark, which
+        is the correct direction to be wrong in — a false dip sends someone to
+        the run history, a hidden one sends nobody anywhere.
         """
         return cloudwatch.LogQueryWidget(
-            title="Eval trend — golden-set pass rate (%) by day",
+            title="Eval trend — golden-set pass rate (%) by day, best and worst run",
             log_group_names=[self.eval_log_group],
             view=cloudwatch.LogQueryVisualizationType.LINE,
             query_lines=[
                 'filter event = "agentpave.eval.scorecard"',
-                "stats max(pass_rate) * 100 as pass_rate_pct by bin(1d)",
+                "stats max(pass_rate) * 100 as best_pct,",
+                "      min(pass_rate) * 100 as worst_pct by bin(1d)",
             ],
             width=FULL,
             height=6,
