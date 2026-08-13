@@ -1,12 +1,52 @@
-%% Rendered to SVG at M07 via `make diagrams`. Placeholder tracks ARCHITECTURE.md §3.
+%% Rendered by `make diagrams` (needs Node; not part of `make check`).
+%% Tracks ARCHITECTURE.md §3 as built, not as planned — six deployed stacks,
+%% the CI ladder that actually runs, and self-heal outside CI (ADR-035).
+%% The propose/dispose loop is drawn as a lane ending in a new pull request
+%% rather than as an arrow back into the repo: the loop is real, but drawing it
+%% as a cycle makes the layout engine put the dev laptop at the bottom.
+%% (A bare `%%` line is not a blank comment to Mermaid — it eats the newline
+%% after it and merges into `flowchart TB`. Keep comment lines non-empty.)
 flowchart TB
-    DEV[dev laptop · pave CLI] --> REPO[service repo]
-    REPO --> CI[GitHub Actions gate\nL0 unit · L1 contract · L2 evals · L5 adversarial\nfail-closed · score-diff PR comment]
-    CI --> AGENT[Catalog Agent · Lambda]
-    AGENT --> GW[LLM Gateway · Lambda\nGuardrails · routing · metering]
-    GW --> BR[Amazon Bedrock\nHaiku serve · Sonnet judge]
-    AGENT --> MCP[MCP tvmaze-catalog · Lambda\ntools.yaml · Cedar in-process]
-    CI --> EVAL[Eval Service\ngolden set · judge · adversarial · baselines]
-    EVAL --> BR
-    AGENT -.OTEL.-> CW[CloudWatch\ndashboard-as-code · defect leakage]
-    GW -.OTEL.-> CW
+    DEV[dev laptop\npave new · pave eval · pave shadow-eval]
+    REPO[service repo\ngate.yml is data, not a workflow]
+    DEV --> REPO
+
+    subgraph CI["GitHub Actions — fail closed"]
+        direction TB
+        WC[what changed\npath filter · ADR-028]
+        L0[L0 hermetic\nruff · unit + contract · cdk synth]
+        L2[L2 evals + L5 adversarial\nskipped on docs-only changes]
+        V{{"gate verdict\nthe one required check\na regression blocks the merge · ADR-034"}}
+        WC --> L0 --> L2 --> V
+    end
+
+    REPO --> WC
+
+    subgraph AWS["AWS · us-west-2 · one account, dev stage · nothing bills while idle"]
+        direction TB
+        SVC[Service-CatalogAgent\nthin agent loop · zero bedrock permissions]
+        GW[Gateway\nGuardrails · routing · screening\nmetering to DynamoDB]
+        MCP[Mcp — tvmaze-catalog\ntools.yaml · Cedar in-process]
+        EVAL[Eval\n31 golden cases · 10 probes\njudge · baseline table]
+        DASH[Dashboard\nLogs Insights over two log groups\nno custom metrics · ADR-030]
+        BR[(Amazon Bedrock\nHaiku serves · Sonnet judges)]
+
+        SVC -->|platform SDK| GW
+        SVC -->|MCP over SigV4| MCP
+        EVAL --> GW
+        GW --> BR
+        GW -.OTEL + metering.-> DASH
+        EVAL -.scorecard line.-> DASH
+    end
+
+    L2 --> EVAL
+
+    subgraph HEAL["self-heal — propose/dispose, outside CI (ADR-035)"]
+        direction TB
+        SH[pave selfheal\nschema drift, or a real defect it must not touch]
+        HUMAN([a human runs Claude Code\nagainst that verdict])
+        PR[ai-proposed pull request\na second human approves\nthen the same gate verdict decides]
+        SH --> HUMAN --> PR
+    end
+
+    L0 -.a red contract suite.-> SH

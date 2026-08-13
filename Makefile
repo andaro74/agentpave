@@ -48,8 +48,26 @@ synth: ## Synthesise CloudFormation from the CDK app — no AWS account needed
 	AWS_PROFILE= AWS_REGION= cdk synth --quiet
 
 .PHONY: diagrams
-diagrams: ## Render docs/diagrams/*.mermaid to SVG
-	$(call not_yet,diagrams,M07)
+diagrams: ## Render docs/diagrams/*.mermaid to SVG — needs Node, not part of make check
+	@# Deliberately outside `make check`, for ADR-029's reason: mermaid-cli
+	@# drives a headless browser, and a hermetic gate that fails on a missing
+	@# renderer blocks a pull request on something no reviewer can fix from the
+	@# diff. What `make check` does assert is that every .mermaid has a
+	@# committed .svg beside it (tests/test_docs_links.py) — which catches a
+	@# render that was never committed, and cannot catch one that went stale.
+	@#
+	@# The precondition is here for the reason `make synth` grew one: a missing
+	@# toolchain must arrive as an instruction, not as an errno.
+	@command -v npx >/dev/null || { \
+		echo "✋ npx is not on PATH — 'make diagrams' renders with mermaid-cli"; \
+		echo "   install Node 18+: https://nodejs.org/"; \
+		exit 1; }
+	@set -e; for src in docs/diagrams/*.mermaid; do \
+		out="$${src%.mermaid}.svg"; \
+		echo "rendering $$src → $$out"; \
+		npx -y @mermaid-js/mermaid-cli@11 -i "$$src" -o "$$out" -b transparent; \
+	done
+	@echo "✅ diagrams rendered — commit the .svg alongside the .mermaid"
 
 # ── Lambda assets ────────────────────────────────────────────────────────────
 
