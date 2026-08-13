@@ -74,8 +74,25 @@ def get_episodes(client: TVMazeClient, *, show_id: int) -> dict[str, Any]:
     }
 
 
-def get_schedule(client: TVMazeClient, *, date: str, country: str = "US") -> dict[str, Any]:
+def get_schedule(
+    client: TVMazeClient, *, date: str, country: str = "US", limit: int | None = None
+) -> dict[str, Any]:
+    """One day's listings, optionally capped.
+
+    `limit` exists because a whole day of US listings is 438k of JSON, and the
+    eval harness already carries a 40k character cap to stop it costing $0.11 a
+    case (`SOURCE_CHAR_CAP`). That cap is a blunt instrument — it truncates
+    mid-array, leaving JSON the model reads as text because it can no longer be
+    parsed — and the note above it says the right fix is a tool that returns
+    less rather than a caller that throws most of it away. This is that fix.
+
+    Defaults to `None`, so every existing caller gets exactly what it got
+    before. Trimming is the caller's decision to make, not a default this tool
+    imposes on the two evals whose questions are about the whole day.
+    """
     entries = client.get("schedule", {"country": country, "date": date})
+    if limit is not None:
+        entries = entries[:limit]
     return {
         "entries": [
             {

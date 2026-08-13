@@ -94,6 +94,29 @@ def test_schedule_entries_declare_required_fields(client: TVMazeClient) -> None:
         assert {"show_name", "episode_name"} <= entry.keys()
 
 
+def test_schedule_limit_caps_the_entries(client: TVMazeClient) -> None:
+    assert len(tools.get_schedule(client, date=RECORDED_DATE, limit=5)["entries"]) == 5
+
+
+def test_schedule_limit_defaults_to_the_whole_day(client: TVMazeClient) -> None:
+    """The default must stay uncapped.
+
+    Two golden cases ask what a whole day's schedule looks like. A tool that
+    quietly trimmed by default would answer them from a prefix and still look
+    grounded — the shape of failure this repository keeps finding, where the
+    assertion and the data agree because both were narrowed.
+    """
+    whole_day = tools.get_schedule(client, date=RECORDED_DATE)["entries"]
+    assert len(whole_day) > 5
+
+
+def test_schedule_limit_above_the_available_entries_is_not_an_error(
+    client: TVMazeClient,
+) -> None:
+    whole_day = tools.get_schedule(client, date=RECORDED_DATE)["entries"]
+    assert tools.get_schedule(client, date=RECORDED_DATE, limit=10_000)["entries"] == whole_day
+
+
 # ── the tool set ──────────────────────────────────────────────────────────
 
 

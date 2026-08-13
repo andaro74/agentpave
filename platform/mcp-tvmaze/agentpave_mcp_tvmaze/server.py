@@ -87,8 +87,8 @@ def build_server(
         return tools.get_episodes(client, show_id=show_id)
 
     @server.tool(name="get_schedule", description=registry.tool("get_schedule").description)
-    def get_schedule(date: str, country: str = "US") -> dict:
+    def get_schedule(date: str, country: str = "US", limit: int | None = None) -> dict:
         guard("get_schedule")
-        return tools.get_schedule(client, date=date, country=country)
+        return tools.get_schedule(client, date=date, country=country, limit=limit)
 
     return server

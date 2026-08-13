@@ -85,7 +85,10 @@ tools:
 
   - name: get_schedule
     owner: platform-team
-    tool_version: 1.0.0
+    # 1.1.0, not 1.0.1: `limit` is an addition, and every call written against
+    # 1.0.0 still means what it meant. A required parameter would have been a
+    # major.
+    tool_version: 1.1.0
     description: >-
       The broadcast schedule for one country and date. Use this to answer
       "what is on tonight" style questions.
@@ -103,6 +106,17 @@ tools:
           type: string
           pattern: "^[A-Z]{2}$"
           description: ISO-3166 country code. Defaults to US.
+        limit:
+          # `anyOf` rather than `type: [integer, "null"]` because that is the
+          # shape MCP derives from `int | None`, and this file's job is to
+          # declare what the server advertises.
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: "null"
+          default: null
+          description: >-
+            Cap on the number of entries returned. Null returns the whole day.
     output_schema:
       type: object
       additionalProperties: false
