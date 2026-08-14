@@ -230,7 +230,7 @@ human reading the output.** Not one was found by adding another test of the kind
 already there.
 
 That is the reusable result, and it is worth more than the list that produced it.
-This repository's gate is 738 hermetic tests, ruff and `cdk synth` over six
+This repository's gate is 741 hermetic tests, ruff and `cdk synth` over six
 stacks — and **eleven** times across six milestones it was green while something
 underneath it was measuring nothing at all.
 
