@@ -153,8 +153,31 @@ $$(aws cloudformation describe-stacks --stack-name "AgentPave-$(1)-$$stage" \
 	--query 'Stacks[0].Outputs[?OutputKey==`$(2)`].OutputValue' --output text 2>/dev/null)
 endef
 
+.PHONY: require-tty
+require-tty:
+	@# `cdk deploy --require-approval broadening` prompts before it widens IAM,
+	@# and with no TTY it does not prompt — it stops. Every deploy this project
+	@# made before M07 was an *update* to stacks that already existed, whose IAM
+	@# was unchanged, so nothing broadened and nothing asked; the verb ran
+	@# headless for six milestones. A clean account creates every statement
+	@# fresh, so all of it broadens, and the one deploy the M07 gate asks for is
+	@# the one that stops.
+	@#
+	@# This is a prerequisite rather than the first line of deploy-dev's recipe
+	@# so that it fires before `build`. Learning you need a terminal after three
+	@# asset builds and a 30s synth is learning it in the wrong order — and it
+	@# is here at all for the reason `make synth` grew its own precondition: a
+	@# missing prerequisite must arrive as an instruction, not as an errno on
+	@# the last line of 40 lines of output.
+	@[ -t 0 ] || { \
+		echo "✋ 'make deploy-dev' needs a terminal."; \
+		echo "   cdk asks before broadening IAM, and on a clean account every"; \
+		echo "   statement is new — so it asks, finds no TTY, and stops."; \
+		echo "   Run it from an interactive shell."; \
+		exit 1; }
+
 .PHONY: deploy-dev
-deploy-dev: build ## ⚠️ creates real infrastructure
+deploy-dev: require-tty build ## ⚠️ creates real infrastructure
 	@# Every asset variable is set here, and forgetting one is silent: the CDK
 	@# app falls back to plain source, which synthesises, passes every IAM
 	@# assertion, deploys without complaint, and then 502s at import. That is
