@@ -13,7 +13,7 @@ Built in public over seven days, one milestone at a time, with
 docs-first, ADR-driven convention as
 [agentic-pii-erasure](https://github.com/andaro74/agentic-pii-erasure).
 
-**38 ADRs · 736 hermetic tests · six stacks · $20.45 of Bedrock, total.**
+**39 ADRs · 741 hermetic tests · six stacks · $20.45 of Bedrock, total.**
 
 ---
 
@@ -153,7 +153,7 @@ metrics, because metrics bill while idle
 ```bash
 make help          # every verb, and which milestone it arrived in
 make install       # uv sync, and create .env from .env.example
-make check         # the hermetic gate — lint, 736 tests, policy, cdk synth
+make check         # the hermetic gate — lint, 741 tests, policy, cdk synth
 ```
 
 `make check` needs **no AWS account**. It does need Python 3.12, [uv](https://docs.astral.sh/uv/)
@@ -203,7 +203,7 @@ invoice reconstruction.
 | Idle cost | **$0** — no provisioned floors |
 | Run-to-run reproducibility | **±0.05%** across a laptop and two GitHub runners |
 | Judge agreement with hand-labelled answers | **90%** against a 0.8 floor |
-| Hermetic gate | **736 tests**, ~15s, no AWS account |
+| Hermetic gate | **741 tests**, ~15s, no AWS account |
 | From nothing to a working platform | `make deploy-dev` |
 
 Two lines are worth pausing on: **the QA machinery cost roughly 6,500× the
@@ -375,7 +375,7 @@ and its deviations were written up.
   milestone
 - [`docs/VALIDATION.md`](docs/VALIDATION.md) — the review log: who ran the
   deployed gate, what broke, and what was done about it
-- [`docs/adr/`](docs/adr/) — 38 ADRs. Every deviation from the spec, written the
+- [`docs/adr/`](docs/adr/) — 39 ADRs. Every deviation from the spec, written the
   same day, including the ones that record a scope cut rather than a design
 
 [Claude Code](https://claude.com/product/claude-code) built it against
