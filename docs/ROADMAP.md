@@ -137,6 +137,18 @@ failures from the week. Project page at floresinnovations.com/projects.
 - **Deployed gate:** full `make walkthrough` from `make deploy-dev` on a clean
   stack; `make destroy-dev` leaves nothing billing.
 
+> **Outcome (2026-08-14): both gates met, with one deliberate narrowing.** The
+> teardown covered the five stage stacks and spared `AgentPave-Ci`, whose
+> CloudFormation-generated role name is referenced by a GitHub variable nothing
+> in this repository can pin (ADR-039) — so "nothing billing" is verified by
+> enumeration over the five, which is where all of the billing was, and
+> `make destroy-dev` is exercised in part. The clean deploy then found that the
+> verb could not run on an empty account at all: `--require-approval broadening`
+> had never had anything to broaden, because every previous deploy was an update.
+> `make walkthrough` came back **5/5, run by a human**, and the graded run
+> reseeded the baseline at 31/31. The three acts, the dashboard and the honest
+> cost section are published; 39 ADRs.
+
 ---
 
 ## Standing rules for every milestone

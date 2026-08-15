@@ -54,8 +54,17 @@ Five things are asserted, and all five are deployed facts rather than mocks:
 the service **scaffolded** into its own stack, **answered** grounded via
 `search_show`, was **guarded** — an injection blocked at
 `contentPolicy:PROMPT_ATTACK` by the platform, not by the model's manners —
-**metered** at $0.000629 across two rows, and **traced** with two spans carrying
+**metered** at $0.000664 across two rows, and **traced** with two spans carrying
 GenAI semantic-convention attributes.
+
+One number there moved, and it is worth the sentence. The same walkthrough on the
+earlier stack cost $0.000629 — **identical 604 input tokens, 5 output instead of
+12** — and the review log had concluded from two matching runs that pinning
+temperature to 0 was what made them match. It was not, quite: the answer came
+back grounded in the same fact and phrased at greater length after a rebuild.
+**Temperature 0 pins the sampling, not the serving stack over time.** The eval
+figures are unaffected — a graded run on the fresh stack landed inside the
+existing six-run spread — so what narrowed was one claim about one answer.
 
 ### Act 2 — The gate bites
 
